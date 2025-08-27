@@ -1,0 +1,37 @@
+[
+  {
+    "id": "r1",
+    "source": "trustpilot",
+    "rating": 2,
+    "review_date": "2025-08-01",
+    "text": "The pricing tiers are super confusing. I thought I was upgrading but got charged more without added value."
+  },
+  {
+    "id": "r2",
+    "source": "trustpilot",
+    "rating": 4,
+    "review_date": "2025-08-02",
+    "text": "Great UI overall, but onboarding took me hours — the setup guide wasn’t clear enough."
+  },
+  {
+    "id": "r3",
+    "source": "g2",
+    "rating": 3,
+    "review_date": "2025-08-03",
+    "text": "We really need integrations with HubSpot and Salesforce. Without them, the tool doesn’t fit into our workflow."
+  },
+  {
+    "id": "r4",
+    "source": "trustpilot",
+    "rating": 5,
+    "review_date": "2025-08-05",
+    "text": "Customer support was fantastic — super quick and helpful!"
+  },
+  {
+    "id": "r5",
+    "source": "g2",
+    "rating": 2,
+    "review_date": "2025-08-06",
+    "text": "The reporting is very limited. I couldn’t export the analytics I needed for my team."
+  }
+]

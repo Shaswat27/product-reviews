@@ -1,0 +1,42 @@
+[
+  {
+    "id": "theme1",
+    "name": "Pricing Confusion",
+    "severity": "high",
+    "trend": 20,
+    "evidence_count": 10,
+    "summary": "Customers find pricing tiers unclear and mismatched with value."
+  },
+  {
+    "id": "theme2",
+    "name": "Onboarding Friction",
+    "severity": "medium",
+    "trend": 5,
+    "evidence_count": 7,
+    "summary": "Users report that setup and onboarding take longer than expected."
+  },
+  {
+    "id": "theme3",
+    "name": "Integration Gaps",
+    "severity": "high",
+    "trend": -15,
+    "evidence_count": 12,
+    "summary": "Lack of integrations with key CRMs (e.g., HubSpot, Salesforce) is blocking adoption."
+  },
+  {
+    "id": "theme4",
+    "name": "Reporting Limitations",
+    "severity": "medium",
+    "trend": 10,
+    "evidence_count": 5,
+    "summary": "Analytics and export functionality are too limited for team workflows."
+  },
+  {
+    "id": "theme5",
+    "name": "Positive Support Experience",
+    "severity": "low",
+    "trend": 0,
+    "evidence_count": 4,
+    "summary": "Many users praise customer support responsiveness."
+  }
+]
