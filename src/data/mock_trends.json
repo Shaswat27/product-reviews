@@ -1,0 +1,8 @@
+[
+  { "product_id": "notion",   "week": "2025-07-28", "themes": 3 },
+  { "product_id": "notion",   "week": "2025-08-04", "themes": 4 },
+  { "product_id": "notion",   "week": "2025-08-11", "themes": 5 },
+  { "product_id": "airtable", "week": "2025-07-28", "themes": 2 },
+  { "product_id": "airtable", "week": "2025-08-04", "themes": 3 },
+  { "product_id": "airtable", "week": "2025-08-11", "themes": 3 }
+]

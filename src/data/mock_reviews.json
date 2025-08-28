@@ -1,0 +1,29 @@
+[
+  {
+    "id": "r1",
+    "product_id": "notion",
+    "source": "trustpilot",
+    "rating": 3,
+    "review_date": "2025-08-05",
+    "body": "Pricing tiers are confusing and the free plan limits essential blocks.",
+    "meta": { "url": "https://trustpilot.example/notion/1" }
+  },
+  {
+    "id": "r2",
+    "product_id": "notion",
+    "source": "g2",
+    "rating": 4,
+    "review_date": "2025-08-10",
+    "body": "Love the templates but onboarding teammates takes too long.",
+    "meta": { "url": "https://g2.example/notion/2" }
+  },
+  {
+    "id": "r3",
+    "product_id": "airtable",
+    "source": "trustpilot",
+    "rating": 2,
+    "review_date": "2025-08-07",
+    "body": "Performance gets slow on big bases; syncing is unreliable at times.",
+    "meta": { "url": "https://trustpilot.example/airtable/3" }
+  }
+]

@@ -1,0 +1,5 @@
+[
+  { "id": "notion",   "name": "Notion",   "slug": "notion" },
+  { "id": "airtable", "name": "Airtable", "slug": "airtable" },
+  { "id": "asana",    "name": "Asana",    "slug": "asana" }
+]
