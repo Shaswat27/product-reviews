@@ -15,8 +15,23 @@ import mockReviews from "@/data/mock_reviews.json";
 import ThemeTrends from "@/components/ThemeTrends";
 
 type Severity = "critical" | "high" | "medium" | "low";
-type Action = { id: string; type: "product" | "gtm"; description: string; impact_score: number; effort_score: number; };
-type Theme = { id: string; product_id: string; name: string; severity: Severity; trend: number; evidence_count: number; summary: string; actions?: Action[]; };
+type Action = {
+  id: string;
+  type: "product" | "gtm";
+  description: string;
+  impact_score: number;
+  effort_score: number;
+};
+type Theme = {
+  id: string;
+  product_id: string;
+  name: string;
+  severity: Severity;
+  trend: number;
+  evidence_count: number;
+  summary: string;
+  actions?: Action[];
+};
 
 const severityConfig = {
   critical: { color: "severity-critical", icon: AlertTriangle, label: "Critical" },
@@ -28,8 +43,9 @@ const severityConfig = {
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ product?: string | string[] }>
+  searchParams: Promise<{ product?: string | string[] }>;
 }) {
+  // ✅ Next.js (your version) requires awaiting searchParams in Server Components
   const sp = await searchParams;
   const q = Array.isArray(sp.product) ? sp.product[0] : sp.product;
 
@@ -38,23 +54,23 @@ export default async function Dashboard({
 
   // Filter by product
   const allThemes = rawThemes as Theme[];
-  const themes = allThemes.filter(t => t.product_id === selectedId).slice(0, 5);
+  const themes = allThemes.filter((t) => t.product_id === selectedId).slice(0, 5);
 
-  const trends = (mockTrendData as any[]).filter(d => d.product_id === selectedId);
-  const reviewsCount = (mockReviews as any[]).filter(r => r.product_id === selectedId).length;
+  const trends = (mockTrendData as any[]).filter((d) => d.product_id === selectedId);
+  const reviewsCount = (mockReviews as any[]).filter((r) => r.product_id === selectedId).length;
   const evidencePoints = themes.reduce((sum, t) => sum + (t.evidence_count || 0), 0);
   const actionItems = themes.reduce((sum, t) => sum + (t.actions?.length || 0), 0);
 
   // Consolidated Top Actions (compact summary)
   const topActions = themes
-    .flatMap(t => (t.actions || []).map(a => ({ ...a, themeName: t.name })))
-    .map(a => ({ ...a, score: a.impact_score - a.effort_score * 0.5 }))
+    .flatMap((t) => (t.actions || []).map((a) => ({ ...a, themeName: t.name })))
+    .map((a) => ({ ...a, score: a.impact_score - a.effort_score * 0.5 }))
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
   return (
     <div className="container mx-auto max-w-7xl space-y-6">
-      {/* ===== Header with Product Picker (Fix #5) ===== */}
+      {/* ===== Header with Product Picker ===== */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold heading-accent">
@@ -63,51 +79,62 @@ export default async function Dashboard({
           </h1>
           <p className="body-ink -mt-1">Latest insights for the selected product</p>
         </div>
-        {/* Product switcher stays native/select but themed via globals */}
         <ProductPicker />
       </div>
 
       {/* ===== Stats Overview ===== */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="card-3d stat-card"><CardContent className="p-6">
-          <div className="flex items-center space-x-2">
-            <AlertTriangle className="h-5 w-5 text-severity-critical" />
-            <div>
-              <p className="text-2xl font-bold">{themes.filter(t => t.severity === "critical").length}</p>
-              <p className="text-sm text-muted-foreground">Critical Issues</p>
+        <Card className="card-3d stat-card">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-2">
+              <AlertTriangle className="h-5 w-5 text-severity-critical" />
+              <div>
+                <p className="text-2xl font-bold">
+                  {themes.filter((t) => t.severity === "critical").length}
+                </p>
+                <p className="text-sm text-muted-foreground">Critical Issues</p>
+              </div>
             </div>
-          </div>
-        </CardContent></Card>
+          </CardContent>
+        </Card>
 
-        <Card className="card-3d stat-card"><CardContent className="p-6">
-          <div className="flex items-center space-x-2">
-            <TrendingUp className="h-5 w-5 text-success" />
-            <div>
-              <p className="text-2xl font-bold">{evidencePoints}</p>
-              <p className="text-sm text-muted-foreground">Evidence Points</p>
+        <Card className="card-3d stat-card">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-2">
+              <TrendingUp className="h-5 w-5 text-success" />
+              <div>
+                <p className="text-2xl font-bold">{evidencePoints}</p>
+                <p className="text-sm text-muted-foreground">Evidence Points</p>
+              </div>
             </div>
-          </div>
-        </CardContent></Card>
+          </CardContent>
+        </Card>
 
-        <Card className="card-3d stat-card"><CardContent className="p-6">
-          <div className="flex items-center space-x-2">
-            <Target className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-2xl font-bold">{actionItems}</p>
-              <p className="text-sm text-muted-foreground">Action Items</p>
+        <Card className="card-3d stat-card">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-2">
+              <Target className="h-5 w-5 text-primary" />
+              <div>
+                <p className="text-2xl font-bold">{actionItems}</p>
+                <p className="text-sm text-muted-foreground">Action Items</p>
+              </div>
             </div>
-          </div>
-        </CardContent></Card>
+          </CardContent>
+        </Card>
 
-        <Card className="card-3d stat-card"><CardContent className="p-6">
-          <div className="flex items-center space-x-2">
-            <Rocket className="h-5 w-5 text-accent" />
-            <div>
-              <p className="text-2xl font-bold">{Math.min(95, 70 + themes.length * 5)}%</p>
-              <p className="text-sm text-muted-foreground">Confidence Score</p>
+        <Card className="card-3d stat-card">
+          <CardContent className="p-6">
+            <div className="flex items-center space-x-2">
+              <Rocket className="h-5 w-5 text-accent" />
+              <div>
+                <p className="text-2xl font-bold">
+                  {Math.min(95, 70 + themes.length * 5)}%
+                </p>
+                <p className="text-sm text-muted-foreground">Confidence Score</p>
+              </div>
             </div>
-          </div>
-        </CardContent></Card>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ===== Main Content ===== */}
@@ -133,16 +160,22 @@ export default async function Dashboard({
           <Card className="card-3d stat-card">
             <CardHeader>
               <CardTitle className="text-base">Top Actions (This Week)</CardTitle>
-              <CardDescription className="body-ink">Prioritized across this product’s themes</CardDescription>
+              <CardDescription className="body-ink">
+                Prioritized across this product’s themes
+              </CardDescription>
             </CardHeader>
             <CardContent>
               {topActions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No actions yet.</p>
               ) : (
-                topActions.map(a => (
+                topActions.map((a) => (
                   <div key={a.id} className="flex items-start gap-2 p-2 rounded bg-secondary">
                     <div className={cn("p-1 rounded", a.type === "product" ? "bg-primary/10" : "bg-accent/10")}>
-                      {a.type === "product" ? <Target className="h-3 w-3 text-primary"/> : <Rocket className="h-3 w-3 text-accent" />}
+                      {a.type === "product" ? (
+                        <Target className="h-3 w-3 text-primary" />
+                      ) : (
+                        <Rocket className="h-3 w-3 text-accent" />
+                      )}
                     </div>
                     <div className="text-sm">
                       <div className="font-medium">{a.description}</div>
@@ -164,7 +197,7 @@ export default async function Dashboard({
   );
 }
 
-/* ===== Theme Card (Fix #3 accents) ===== */
+/* ===== Theme Card ===== */
 interface ThemeCardProps {
   theme: Theme;
 }
@@ -179,13 +212,15 @@ function ThemeCard({ theme }: ThemeCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex items-center space-x-2">
-            <Badge className={cn(
-              "border-0",
-              theme.severity === "critical" && "badge-critical",
-              theme.severity === "high"     && "badge-high",
-              theme.severity === "medium"   && "badge-medium",
-              theme.severity === "low"      && "badge-low"
-            )}>
+            <Badge
+              className={cn(
+                "border-0",
+                theme.severity === "critical" && "badge-critical",
+                theme.severity === "high" && "badge-high",
+                theme.severity === "medium" && "badge-medium",
+                theme.severity === "low" && "badge-low"
+              )}
+            >
               <SeverityIcon className="h-3 w-3 mr-1" />
               {severity.label}
             </Badge>
@@ -198,7 +233,9 @@ function ThemeCard({ theme }: ThemeCardProps) {
             ) : (
               <TrendingDown className="h-4 w-4 text-severity-critical" />
             )}
-            <span className={cn("font-medium", isPositiveTrend ? "text-success" : "text-severity-critical")}>
+            <span
+              className={cn("font-medium", isPositiveTrend ? "text-success" : "text-severity-critical")}
+            >
               {Math.abs(theme.trend)}%
             </span>
           </div>
@@ -211,7 +248,6 @@ function ThemeCard({ theme }: ThemeCardProps) {
       </CardHeader>
 
       <CardContent>
-        {/* Subtle Columbia-blue rule instead of heavy teal bars */}
         <div className="h-[3px] w-full rounded-full bg-[hsl(var(--accent))] mb-3" />
 
         <div className="space-y-3">
