@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabaseBrowser } from '@/lib/supabaseBrowser';
+import { setServerSession } from './actions'
 
 export default function LoginContent() {
   const router = useRouter();
@@ -81,7 +82,15 @@ export default function LoginContent() {
 
       if (error) { setMsg(mapSupabaseError(error)); return; }
 
-      if (data?.session) { router.replace(redirectTo); return; }
+      if (data?.session) { 
+        await setServerSession(
+          data.session.access_token,
+          data.session.refresh_token! // refresh_token is required
+        )
+        router.replace(redirectTo); 
+        router.refresh();
+        return; 
+      }
 
       setMsg('Could not start a session. Please try again.');
     } catch {

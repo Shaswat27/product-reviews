@@ -1,44 +1,73 @@
 // middleware.ts
-import { NextResponse, type NextRequest } from "next/server";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
-
-const PROTECTED = ["/dashboard", "/insights", "/settings"];
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
-  const { pathname, search } = req.nextUrl;
-  const isProtected = PROTECTED.some((p) => pathname.startsWith(p));
-  if (!isProtected) return NextResponse.next(); // allow /login and /auth/callback
+  const { pathname, search } = req.nextUrl
 
-  const res = NextResponse.next();
+  // Always allow static assets and the auth callback to pass through
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/assets') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/auth/callback' ||
+    pathname === '/check-email'
+  ) {
+    return NextResponse.next()
+  }
+
+  // We'll mutate cookies on this response when Supabase sets them
+  const res = NextResponse.next()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // NEW: getAll/setAll in SSR
-        getAll() {
-          return req.cookies.getAll().map(({ name, value }) => ({ name, value }));
-        },
-        setAll(cookies: { name: string; value: string; options?: CookieOptions }[]) {
-          for (const { name, value, options } of cookies) {
-            res.cookies.set(name, value, options);
-          }
+        // NEW pattern: read all request cookies
+        getAll: () => req.cookies.getAll(),
+        // NEW pattern: batch-set response cookies
+        setAll: (cookies) => {
+          cookies.forEach(({ name, value, options }) => {
+            res.cookies.set(name, value, options)
+          })
         },
       },
     }
-  );
+  )
 
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("redirect", pathname + search);
-    return NextResponse.redirect(url);
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+
+  // If user hits /login:
+  if (pathname === '/login') {
+    // already signed in? send them to their redirect (or dashboard)
+    if (session) {
+      const url = req.nextUrl.clone()
+      const params = new URLSearchParams(search)
+      url.pathname = params.get('redirect') || '/dashboard'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+    // not signed in → allow /login to render
+    return res
   }
-  return res;
+
+  // For all other app routes, require auth
+  if (!session) {
+    const url = req.nextUrl.clone()
+    url.pathname = '/login'
+    url.search = `?redirect=${encodeURIComponent(pathname + (search || ''))}`
+    return NextResponse.redirect(url)
+  }
+
+  // Signed in → proceed
+  return res
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/insights/:path*", "/settings/:path*"],
-};
+  // protect everything except API & static
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+}
