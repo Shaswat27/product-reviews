@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, LineChart, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SignOutButton } from "@/components/SignOutButton"
 
 const items = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
@@ -35,6 +36,9 @@ export default function SidebarItems() {
           </Link>
         );
       })}
+      <div className="mt-4 border-t pt-2">
+        <SignOutButton />
+      </div>
     </nav>
   );
 }

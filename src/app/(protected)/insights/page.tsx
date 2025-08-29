@@ -1,3 +1,7 @@
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store';
+
 import ProductPicker from "@/components/ProductPicker";
 import reportsJson from "@/data/mock_insights.json";
 import productsJson from "@/data/mock_products.json";
