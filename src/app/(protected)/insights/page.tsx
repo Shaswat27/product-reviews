@@ -8,6 +8,7 @@ import productsJson from "@/data/mock_products.json";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import ExportAllButton from "@/components/ExportAllButton";
 import { FileText, Calendar, CheckCircle, Clock, Download, Eye } from "lucide-react";
 
 type InsightReport = {
@@ -87,10 +88,8 @@ export default async function Insights({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recent Reports</h2>
-          <Button variant="outline" size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            Export All
-          </Button>
+          {/* Prefer server export by passing productId; also pass reports for safe fallback */}
+            <ExportAllButton productId={selectedId} reports={reports} />
         </div>
 
         <div className="space-y-3">
