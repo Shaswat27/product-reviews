@@ -1,11 +1,11 @@
-# **Signal Lens: A customer voice to product & GTM insights agent**
+# **SignalLens: A customer voice to product & GTM insights agent**
 
 ### **Overview**
 
 This project is an AI-powered SaaS-style tool that turns **customer reviews** into **actionable product & GTM insights**.\
 &#x20;Built as a demo for how founders/PMs can use AI to distill noisy user feedback into **roadmap priorities, pricing tweaks, and positioning ideas**.
 
-👉 Live demo: _(add Vercel link once deployed)_
+👉 Live demo: _https://signallens.vercel.app/_
 
 ### **Features**
 
