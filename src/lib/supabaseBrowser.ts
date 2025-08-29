@@ -1,9 +1,14 @@
 // lib/supabaseBrowser.ts
 import { createBrowserClient } from '@supabase/ssr'
 
-export const supabaseBrowser = () =>
-  createBrowserClient(
+let _client: ReturnType<typeof createBrowserClient> | null = null
+
+export function supabaseBrowser() {
+  if (_client) return _client
+  _client = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true }}
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    // No custom cookie adapter needed in the browser.
   )
+  return _client
+}

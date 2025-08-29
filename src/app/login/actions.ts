@@ -1,28 +1,28 @@
+// src/app/login/actions.ts
 'use server'
 
-import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
+import { supabaseServerAction } from '@/lib/supabaseServerAction'
 
-export async function setServerSession(access_token: string, refresh_token: string) {
-  // IMPORTANT: await here so cookieStore is not a Promise
-  const cookieStore = await cookies()
+export type SetServerSessionResult =
+  | { ok: true }
+  | { ok: false; error: string }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        // NEW pattern
-        getAll: () => cookieStore.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
+function toErrorMessage(e: unknown): string {
+  if (e instanceof Error) return e.message
+  if (typeof e === 'string') return e
+  try { return JSON.stringify(e) } catch { return 'unknown error' }
+}
 
-  const { error } = await supabase.auth.setSession({ access_token, refresh_token })
-  if (error) throw error
+export async function setServerSession(
+  access_token: string,
+  refresh_token: string
+): Promise<SetServerSessionResult> {
+  try {
+    const supabase = await supabaseServerAction()
+    const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+    if (error) return { ok: false, error: error.message }
+    return { ok: true }
+  } catch (e: unknown) {
+    return { ok: false, error: toErrorMessage(e) }
+  }
 }

@@ -19,10 +19,13 @@ export default function LoginContent() {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    supabaseBrowser().auth.getSession().then(({ data }) => {
-      if (data.session) router.replace(redirectTo);
-    });
-  }, [router, redirectTo]);
+  let active = true
+  ;(async () => {
+    const { data: { session } } = await supabaseBrowser().auth.getSession()
+    if (active && session) router.replace(redirectTo)
+  })()
+  return () => { active = false }
+}, [router, redirectTo])
 
   useEffect(() => {
     const qsError = sp.get('error');
@@ -71,7 +74,10 @@ export default function LoginContent() {
       const emailTrimmed = email.trim();
       const token = code.trim().replace(/\s/g, '');
 
-      if (!/^\d{6}$/.test(token)) { setMsg('Enter the 6-digit code from the email.'); return; }
+      if (!/^\d{6}$/.test(token)) {
+        setMsg('Enter the 6-digit code from the email.');
+        return;
+      }
 
       const supabase = supabaseBrowser();
       const { data, error } = await supabase.auth.verifyOtp({
@@ -80,20 +86,30 @@ export default function LoginContent() {
         type: 'email',
       });
 
-      if (error) { setMsg(mapSupabaseError(error)); return; }
+      if (error) {
+        setMsg(mapSupabaseError(error));
+        return;
+      }
 
-      if (data?.session) { 
-        await setServerSession(
-          data.session.access_token,
-          data.session.refresh_token! // refresh_token is required
-        )
-        router.replace(redirectTo); 
+      if (data?.session) {
+        // Try to persist SSR cookies, but DO NOT block redirect if this fails on Vercel.
+        try {
+          await setServerSession(
+            data.session.access_token,
+            data.session.refresh_token! // refresh_token is required
+          );
+        } catch {
+          // swallow: client is already logged in; SSR cookie write can be retried on next request
+        }
+
+        router.replace(redirectTo);
         router.refresh();
-        return; 
+        return;
       }
 
       setMsg('Could not start a session. Please try again.');
     } catch {
+      // Only get here on actual verify failures/network issues.
       setMsg('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
