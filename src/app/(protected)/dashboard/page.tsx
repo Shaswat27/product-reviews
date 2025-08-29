@@ -13,7 +13,7 @@ import ProductPicker from "@/components/ProductPicker";
 import productsJson from "@/data/mock_products.json";
 import rawThemes from "@/data/mock_themes.json";
 import mockTrendData from "@/data/mock_trends.json";
-import mockReviews from "@/data/mock_reviews.json";
+// import mockReviews from "@/data/mock_reviews.json";
 
 // Chart
 import ThemeTrends from "@/components/ThemeTrends";
@@ -37,12 +37,30 @@ type Theme = {
   actions?: Action[];
 };
 
+type Trend = {
+  product_id: string;
+  week: string;      // ISO date string
+  themes: number;    // count per week
+};
+
+type TrendPoint = { week: string; themes: number }; // what ThemeTrends wants
+
 const severityConfig = {
   critical: { color: "severity-critical", icon: AlertTriangle, label: "Critical" },
   high:     { color: "severity-high",     icon: AlertTriangle, label: "High" },
   medium:   { color: "severity-medium",   icon: Clock,         label: "Medium" },
   low:      { color: "severity-low",      icon: Clock,         label: "Low" },
 } as const;
+
+function isTrend(x: unknown): x is Trend {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "product_id" in x &&
+    "week" in x &&
+    "themes" in x
+  );
+}
 
 export default async function Dashboard({
   searchParams,
@@ -60,8 +78,11 @@ export default async function Dashboard({
   const allThemes = rawThemes as Theme[];
   const themes = allThemes.filter((t) => t.product_id === selectedId).slice(0, 5);
 
-  const trends = (mockTrendData as any[]).filter((d) => d.product_id === selectedId);
-  const reviewsCount = (mockReviews as any[]).filter((r) => r.product_id === selectedId).length;
+  const trends: TrendPoint[] = (mockTrendData as unknown[])
+  .filter(isTrend) // optional; remove if you trust the JSON
+  .filter((d) => d.product_id === selectedId)
+  .map(({ week, themes }) => ({ week, themes }));
+  // const reviewsCount = (mockReviews as any[]).filter((r) => r.product_id === selectedId).length;
   const evidencePoints = themes.reduce((sum, t) => sum + (t.evidence_count || 0), 0);
   const actionItems = themes.reduce((sum, t) => sum + (t.actions?.length || 0), 0);
 
@@ -194,7 +215,7 @@ export default async function Dashboard({
           </Card>
 
           <h2 className="text-xl font-semibold text-foreground">Theme Trends</h2>
-          <ThemeTrends data={trends as any} />
+          <ThemeTrends data={trends} />
         </div>
       </div>
     </div>

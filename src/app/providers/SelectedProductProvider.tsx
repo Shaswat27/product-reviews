@@ -1,6 +1,13 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type ProductId = string | null;
@@ -20,33 +27,41 @@ export function SelectedProductProvider({ children }: { children: React.ReactNod
   // Initialize from URL (?product=) or localStorage
   const [productId, setProductIdState] = useState<ProductId>(null);
 
-  // hydrate from URL first, then localStorage
+  // Hydrate from URL first, else localStorage; re-run if URL changes (e.g., back/forward)
   useEffect(() => {
     const fromUrl = searchParams.get("product");
     if (fromUrl) {
       setProductIdState(fromUrl);
       return;
     }
-    const fromStorage = typeof window !== "undefined" ? window.localStorage.getItem("selectedProductId") : null;
+    const fromStorage =
+      typeof window !== "undefined"
+        ? window.localStorage.getItem("selectedProductId")
+        : null;
     if (fromStorage) setProductIdState(fromStorage);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // run once on mount
+  }, [searchParams]);
 
-  // setter that also syncs to localStorage and URL
-  const setProductId = (id: ProductId) => {
-    setProductIdState(id);
-    if (typeof window !== "undefined") {
-      if (id) window.localStorage.setItem("selectedProductId", id);
-      else window.localStorage.removeItem("selectedProductId");
-    }
-    // keep other params, just replace product
-    const params = new URLSearchParams(searchParams.toString());
-    if (id) params.set("product", id);
-    else params.delete("product");
-    router.replace(`${pathname}?${params.toString()}`);
-  };
+  // Stable setter that also syncs to localStorage and URL
+  const setProductId = useCallback(
+    (id: ProductId) => {
+      setProductIdState(id);
 
-  const value = useMemo(() => ({ productId, setProductId }), [productId]);
+      if (typeof window !== "undefined") {
+        if (id) window.localStorage.setItem("selectedProductId", id);
+        else window.localStorage.removeItem("selectedProductId");
+      }
+
+      // keep other params, just replace product
+      const params = new URLSearchParams(searchParams.toString());
+      if (id) params.set("product", id);
+      else params.delete("product");
+
+      router.replace(`${pathname}?${params.toString()}`);
+    },
+    [router, pathname, searchParams]
+  );
+
+  const value = useMemo(() => ({ productId, setProductId }), [productId, setProductId]);
 
   return (
     <SelectedProductContext.Provider value={value}>

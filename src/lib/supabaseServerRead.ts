@@ -13,7 +13,10 @@ export async function supabaseServerRead() {
         return cookieStore.getAll().map(({ name, value }) => ({ name, value }));
       },
       // ⛔ SSR must not write cookies in Next 15
-      setAll(_cookies: { name: string; value: string; options?: CookieOptions }[]) {
+      setAll(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        _cookies: { name: string; value: string; options?: CookieOptions }[]
+      ) {
         /* no-op */
       },
     },
