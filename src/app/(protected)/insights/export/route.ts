@@ -4,8 +4,6 @@ import reportsJson from "@/data/mock_insights.json";
 type InsightReport = {
   id: string;
   product_id: string;
-  status: "completed" | "draft";
-  themes_count: number;
   title: string;
   summary: string;
   date: string;

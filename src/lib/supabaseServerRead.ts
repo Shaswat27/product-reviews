@@ -13,11 +13,8 @@ export async function supabaseServerRead() {
         getAll() {
           return cookieStore.getAll()
         },
-        setAll(cookiesToSet) {
-          // Allow refresh token rotations to persist during reads.
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
+        setAll() {
+          // no-op
         },
       },
     }

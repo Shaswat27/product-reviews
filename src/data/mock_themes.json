@@ -6,23 +6,7 @@
     "severity": "high",
     "trend": -18,
     "evidence_count": 42,
-    "summary": "Users report confusion around tier limits and per-seat pricing.",
-    "actions": [
-      {
-        "id": "a1",
-        "type": "product",
-        "description": "Add inline limit counters on free plan (blocks, members).",
-        "impact_score": 8,
-        "effort_score": 3
-      },
-      {
-        "id": "a2",
-        "type": "gtm",
-        "description": "Publish a 'Which plan is right for me?' chooser with examples.",
-        "impact_score": 7,
-        "effort_score": 2
-      }
-    ]
+    "summary": "Users report confusion around tier limits and per-seat pricing."
   },
   {
     "id": "t-notion-2",
@@ -31,40 +15,15 @@
     "severity": "medium",
     "trend": 12,
     "evidence_count": 31,
-    "summary": "Inviting and activating collaborators takes multiple steps.",
-    "actions": [
-      {
-        "id": "a3",
-        "type": "product",
-        "description": "One-click invite with default workspace + role templates.",
-        "impact_score": 7,
-        "effort_score": 4
-      },
-      {
-        "id": "a4",
-        "type": "gtm",
-        "description": "Add a 90-sec onboarding video to invites and empty states.",
-        "impact_score": 6,
-        "effort_score": 2
-      }
-    ]
+    "summary": "Inviting and activating collaborators takes multiple steps."
   },
   {
     "id": "t-airtable-1",
     "product_id": "airtable",
     "name": "Performance on large bases",
-    "severity": "critical",
+    "severity": "high",
     "trend": -8,
     "evidence_count": 54,
-    "summary": "Slow load and view switching with 50k+ rows; sync delays.",
-    "actions": [
-      {
-        "id": "a5",
-        "type": "product",
-        "description": "Virtualized grid + lazy relations for bases > 25k rows.",
-        "impact_score": 9,
-        "effort_score": 6
-      }
-    ]
+    "summary": "Slow load and view switching with 50k+ rows; sync delays."
   }
 ]

@@ -2,8 +2,6 @@
   {
     "id": "ir-notion-2025-08-11",
     "product_id": "notion",
-    "status": "completed",
-    "themes_count": 4,
     "title": "Weekly Insights — Notion",
     "summary": "Pricing clarity remains top complaint; onboarding improving.",
     "date": "2025-08-11"
@@ -11,8 +9,6 @@
   {
     "id": "ir-airtable-2025-08-11",
     "product_id": "airtable",
-    "status": "draft",
-    "themes_count": 3,
     "title": "Weekly Insights — Airtable",
     "summary": "Performance on large bases continues to dominate feedback.",
     "date": "2025-08-11"

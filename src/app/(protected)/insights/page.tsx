@@ -5,17 +5,14 @@ export const fetchCache = 'force-no-store';
 import ProductPicker from "@/components/ProductPicker";
 import reportsJson from "@/data/mock_insights.json";
 import productsJson from "@/data/mock_products.json";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ExportAllButton from "@/components/ExportAllButton";
-import { FileText, Calendar, CheckCircle, Clock, Download, Eye } from "lucide-react";
+import { Calendar, Download, Eye } from "lucide-react";
 
 type InsightReport = {
   id: string;
   product_id: string;
-  status: "completed" | "draft";
-  themes_count: number;
   title: string;
   summary: string;
   date: string;
@@ -35,9 +32,6 @@ export default async function Insights({
   const reports = (reportsJson as InsightReport[]).filter(
     (r) => r.product_id === selectedId
   );
-  const total = reports.length;
-  const completed = reports.filter((r) => r.status === "completed").length;
-  const drafts = reports.filter((r) => r.status === "draft").length;
 
   return (
     <div className="w-full space-y-6">
@@ -47,42 +41,6 @@ export default async function Insights({
           <p className="body-ink -mt-1">Historical analysis for the selected product</p>
         </div>
         <ProductPicker />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">{total}</p>
-                <p className="text-sm text-muted-foreground">Total Reports</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">{completed}</p>
-                <p className="text-sm text-muted-foreground">Completed</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <div>
-                <p className="text-2xl font-bold">{drafts}</p>
-                <p className="text-sm text-muted-foreground">Drafts</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="space-y-4">
@@ -115,12 +73,6 @@ function ReportCard({ report }: { report: InsightReport }) {
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <div className="mb-2 flex items-center gap-2">
-              <Badge variant={report.status === "completed" ? "default" : "secondary"}>
-                {report.status === "completed" ? "Completed" : "Draft"}
-              </Badge>
-              <Badge variant="outline">{report.themes_count} themes</Badge>
-            </div>
             <CardTitle className="text-lg">{report.title}</CardTitle>
             <CardDescription className="mt-1">{report.summary}</CardDescription>
             <div className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">

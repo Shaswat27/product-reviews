@@ -13,14 +13,16 @@ import ProductPicker from "@/components/ProductPicker";
 import productsJson from "@/data/mock_products.json";
 import rawThemes from "@/data/mock_themes.json";
 import mockTrendData from "@/data/mock_trends.json";
+import rawActions from "@/data/mock_actions.json";
 // import mockReviews from "@/data/mock_reviews.json";
 
 // Chart
 import ThemeTrends from "@/components/ThemeTrends";
 
-type Severity = "critical" | "high" | "medium" | "low";
+type Severity = "high" | "medium" | "low";
 type Action = {
   id: string;
+  theme_id: string;
   type: "product" | "gtm";
   description: string;
   impact_score: number;
@@ -34,7 +36,6 @@ type Theme = {
   trend: number;
   evidence_count: number;
   summary: string;
-  actions?: Action[];
 };
 
 type Trend = {
@@ -46,7 +47,6 @@ type Trend = {
 type TrendPoint = { week: string; themes: number }; // what ThemeTrends wants
 
 const severityConfig = {
-  critical: { color: "severity-critical", icon: AlertTriangle, label: "Critical" },
   high:     { color: "severity-high",     icon: AlertTriangle, label: "High" },
   medium:   { color: "severity-medium",   icon: Clock,         label: "Medium" },
   low:      { color: "severity-low",      icon: Clock,         label: "Low" },
@@ -78,20 +78,25 @@ export default async function Dashboard({
   const allThemes = rawThemes as Theme[];
   const themes = allThemes.filter((t) => t.product_id === selectedId).slice(0, 5);
 
+  // Do the same for actions
+  const allActions = rawActions as Action[];
+  const actionsByTheme = Object.groupBy(allActions, a => a.theme_id) as Record<string, Action[]>;
+
   const trends: TrendPoint[] = (mockTrendData as unknown[])
   .filter(isTrend) // optional; remove if you trust the JSON
   .filter((d) => d.product_id === selectedId)
   .map(({ week, themes }) => ({ week, themes }));
   // const reviewsCount = (mockReviews as any[]).filter((r) => r.product_id === selectedId).length;
   const evidencePoints = themes.reduce((sum, t) => sum + (t.evidence_count || 0), 0);
-  const actionItems = themes.reduce((sum, t) => sum + (t.actions?.length || 0), 0);
+  const actionItems = allActions.length;
 
   // Consolidated Top Actions (compact summary)
-  const topActions = themes
-    .flatMap((t) => (t.actions || []).map((a) => ({ ...a, themeName: t.name })))
-    .map((a) => ({ ...a, score: a.impact_score - a.effort_score * 0.5 }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5);
+  const themeNameById = new Map(themes.map(t => [t.id, t.name]));
+  const topActions = allActions
+  .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
+  .map(a => ({ ...a, score: a.impact_score - a.effort_score * 0.5 }))
+  .sort((a, b) => b.score - a.score)
+  .slice(0, 5);
 
   return (
     <div className="container mx-auto max-w-7xl space-y-6">
@@ -112,12 +117,12 @@ export default async function Dashboard({
         <Card className="card-3d stat-card">
           <CardContent className="p-6">
             <div className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-severity-critical" />
+              <AlertTriangle className="h-5 w-5 text-severity-high" />
               <div>
                 <p className="text-2xl font-bold">
-                  {themes.filter((t) => t.severity === "critical").length}
+                  {themes.filter((t) => t.severity === "high").length}
                 </p>
-                <p className="text-sm text-muted-foreground">Critical Issues</p>
+                <p className="text-sm text-muted-foreground">High Severity Issues</p>
               </div>
             </div>
           </CardContent>
@@ -175,7 +180,7 @@ export default async function Dashboard({
 
           <div className="space-y-4">
             {themes.map((theme) => (
-              <ThemeCard key={theme.id} theme={theme} />
+              <ThemeCard key={theme.id} theme={theme} actions={actionsByTheme[theme.id] ?? []}/>
             ))}
           </div>
         </div>
@@ -225,9 +230,10 @@ export default async function Dashboard({
 /* ===== Theme Card ===== */
 interface ThemeCardProps {
   theme: Theme;
+  actions: Action[];
 }
 
-function ThemeCard({ theme }: ThemeCardProps) {
+function ThemeCard({ theme, actions }: ThemeCardProps) {
   const severity = severityConfig[theme.severity];
   const SeverityIcon = severity.icon;
   const isPositiveTrend = theme.trend >= 0;
@@ -240,7 +246,6 @@ function ThemeCard({ theme }: ThemeCardProps) {
             <Badge
               className={cn(
                 "border-0",
-                theme.severity === "critical" && "badge-critical",
                 theme.severity === "high" && "badge-high",
                 theme.severity === "medium" && "badge-medium",
                 theme.severity === "low" && "badge-low"
@@ -256,10 +261,10 @@ function ThemeCard({ theme }: ThemeCardProps) {
             {isPositiveTrend ? (
               <TrendingUp className="h-4 w-4 text-success" />
             ) : (
-              <TrendingDown className="h-4 w-4 text-severity-critical" />
+              <TrendingDown className="h-4 w-4 text-severity-high" />
             )}
             <span
-              className={cn("font-medium", isPositiveTrend ? "text-success" : "text-severity-critical")}
+              className={cn("font-medium", isPositiveTrend ? "text-success" : "text-severity-high")}
             >
               {Math.abs(theme.trend)}%
             </span>
@@ -278,7 +283,7 @@ function ThemeCard({ theme }: ThemeCardProps) {
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-foreground">Recommended Actions</h4>
           <div className="space-y-2">
-            {(theme.actions ?? []).map((action: Action) => (
+            {actions.map((action: Action) => (
               <div key={action.id} className="flex items-start gap-2 p-3 bg-secondary rounded-lg">
                 <div className={cn("p-1 rounded", action.type === "product" ? "bg-primary/10" : "bg-accent/10")}>
                   {action.type === "product" ? (

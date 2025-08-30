@@ -141,7 +141,7 @@ export default function LoginContent() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-          <button type="submit" disabled={loading || !email} className="w-full rounded-lg border p-2">
+          <button type="submit" disabled={loading || !email} className="w-full rounded-lg border p-2 cursor-pointer">
             {loading ? 'Sending…' : 'Send code'}
           </button>
         </form>
@@ -158,10 +158,10 @@ export default function LoginContent() {
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
-          <button type="submit" disabled={loading || !code} className="w-full rounded-lg border p-2">
+          <button type="submit" disabled={loading || !code} className="w-full rounded-lg border p-2 cursor-pointer">
             {loading ? 'Verifying…' : 'Verify & continue'}
           </button>
-          <button type="button" onClick={sendCode} disabled={loading || cooldown > 0} className="w-full rounded-lg border p-2">
+          <button type="button" onClick={sendCode} disabled={loading || cooldown > 0} className="w-full rounded-lg border p-2 cursor-pointer">
             {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend code'}
           </button>
         </form>
