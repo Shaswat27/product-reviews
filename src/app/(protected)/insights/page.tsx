@@ -3,8 +3,7 @@ export const revalidate = 0
 export const fetchCache = 'force-no-store';
 
 import ProductPicker from "@/components/ProductPicker";
-import reportsJson from "@/data/mock_insights.json";
-import productsJson from "@/data/mock_products.json";
+import { supabaseServerRead } from "@/lib/supabaseServerRead";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import ExportAllButton from "@/components/ExportAllButton";
@@ -18,20 +17,33 @@ type InsightReport = {
   date: string;
 };
 
-export default async function Insights({
-  searchParams,
-}: {
-  searchParams?: { product?: string | string[] };
-}) {
+type Product = { id: string; name: string; slug?: string };
+
+export default async function Insights({ searchParams }: { searchParams?: { product?: string | string[] } }) {
   const sp = await searchParams;
   const q = Array.isArray(sp?.product) ? sp?.product[0] : sp?.product;
 
-  const products = productsJson as { id: string; name: string }[];
-  const selectedId = q && products.some((p) => p.id === q) ? q : products[0].id;
+  const supabase = await supabaseServerRead();
 
-  const reports = (reportsJson as InsightReport[]).filter(
-    (r) => r.product_id === selectedId
-  );
+  // 1) Load products from Supabase (authoritative)
+  const { data: pr, error: prErr } = await supabase
+      .from("insight_reports")
+      .select("product_id")
+      .order("product_id", { ascending: true });
+  if (prErr) throw prErr;
+  const productIds = Array.from(new Set((pr ?? []).map(r => r.product_id))).filter(Boolean) as string[];
+  const productList: Product[] = productIds.map(id => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1) }));
+  
+  // 2) Pick selection: use ?product if present & valid; otherwise first product
+  const selectedId = (q && productIds.includes(q)) ? q : productIds[0];
+
+  // 3) Load reports for selected product (allow empty results!)
+  const { data: reports, error: reportsErr } = await supabase
+    .from("insight_reports")
+    .select("id, product_id, title, summary, date:week_start::date")
+    .eq("product_id", selectedId ?? "__none__")
+    .order("week_start", { ascending: false });
+  if (reportsErr) throw reportsErr;
 
   return (
     <div className="w-full space-y-6">
@@ -40,21 +52,24 @@ export default async function Insights({
           <h1 className="text-3xl font-bold text-[hsl(var(--primary))]">Insight Reports</h1>
           <p className="body-ink -mt-1">Historical analysis for the selected product</p>
         </div>
-        <ProductPicker />
+        <ProductPicker products={productList} />
       </div>
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recent Reports</h2>
-          {/* Prefer server export by passing productId; also pass reports for safe fallback */}
-            <ExportAllButton productId={selectedId} reports={reports} />
+          <ExportAllButton productId={selectedId} />
         </div>
 
-        <div className="space-y-3">
-          {reports.map((report) => (
-            <ReportCard key={report.id} report={report} />
-          ))}
-        </div>
+        {(!reports || reports.length === 0) ? (
+          <div className="text-sm text-muted-foreground border rounded-md p-6">
+            No reports yet for this product.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {reports.map((report) => (<ReportCard key={report.id} report={report} />))}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -24,7 +24,7 @@ import crypto from "crypto";
 
 type UUID = string;
 
-type MockProduct = { id: string; name: string; slug: string };
+// type MockProduct = { id: string; name: string; slug: string };
 type MockReview = {
   id: string;
   product_id: string;
@@ -32,7 +32,7 @@ type MockReview = {
   rating?: number;
   review_date?: string; // ISO
   body: string;
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 };
 type MockTheme = {
   id: string; // e.g., "t-notion-1"
@@ -112,14 +112,12 @@ async function main() {
 
   console.log("Loading mock files from /data ...");
   const [
-    products,
     reviews,
     themes,
     actions,
     insights,
     trends,
   ] = await Promise.all([
-    loadJson<MockProduct[]>("mock_products.json").catch(() => []),
     loadJson<MockReview[]>("mock_reviews.json"),
     loadJson<MockTheme[]>("mock_themes.json"),
     loadJson<MockAction[]>("mock_actions.json"),
@@ -208,7 +206,7 @@ async function main() {
       description: a.description,
       impact,
       effort,
-      evidence: null as any, // placeholder (LLM Stage-2 populates later)
+      evidence: null as unknown, // placeholder (LLM Stage-2 populates later)
     };
   });
 

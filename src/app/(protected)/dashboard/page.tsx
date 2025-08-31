@@ -9,24 +9,21 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ProductPicker from "@/components/ProductPicker";
 
-// Mocks
-import productsJson from "@/data/mock_products.json";
-import rawThemes from "@/data/mock_themes.json";
-import mockTrendData from "@/data/mock_trends.json";
-import rawActions from "@/data/mock_actions.json";
-// import mockReviews from "@/data/mock_reviews.json";
+// Supabase
+import { supabaseServerRead } from "@/lib/supabaseServerRead";
 
 // Chart
 import ThemeTrends from "@/components/ThemeTrends";
 
 type Severity = "high" | "medium" | "low";
+type Product = { id: string; name: string; slug?: string };
 type Action = {
   id: string;
   theme_id: string;
-  type: "product" | "gtm";
+  kind: "product" | "gtm";
   description: string;
-  impact_score: number;
-  effort_score: number;
+  impact: number;
+  effort: number;
 };
 type Theme = {
   id: string;
@@ -38,13 +35,18 @@ type Theme = {
   summary: string;
 };
 
+/* 
 type Trend = {
   product_id: string;
   week: string;      // ISO date string
   themes: number;    // count per week
 };
+*/
 
 type TrendPoint = { week: string; themes: number }; // what ThemeTrends wants
+// ---- Supabase row helpers (explicit to satisfy noImplicitAny) ----
+type TrendRow =  { week: string; themes: number };
+// Theme and Action already defined below; reuse them as row types
 
 const severityConfig = {
   high:     { color: "severity-high",     icon: AlertTriangle, label: "High" },
@@ -52,7 +54,7 @@ const severityConfig = {
   low:      { color: "severity-low",      icon: Clock,         label: "Low" },
 } as const;
 
-function isTrend(x: unknown): x is Trend {
+/* function isTrend(x: unknown): x is Trend {
   return (
     typeof x === "object" &&
     x !== null &&
@@ -60,7 +62,7 @@ function isTrend(x: unknown): x is Trend {
     "week" in x &&
     "themes" in x
   );
-}
+} */
 
 export default async function Dashboard({
   searchParams,
@@ -71,32 +73,65 @@ export default async function Dashboard({
   const sp = await searchParams;
   const q = Array.isArray(sp.product) ? sp.product[0] : sp.product;
 
-  const products = productsJson as { id: string; name: string }[];
-  const selectedId = q && products.some((p) => p.id === q) ? q : products[0].id;
+  // Load products from Supabase (authoritative)
+  const supabase = await supabaseServerRead();
+  const { data: themeProducts, error: themeProductsErr } = await supabase
+    .from("themes")
+    .select("product_id")
+    .order("product_id", { ascending: true });
+  if (themeProductsErr) throw themeProductsErr;
+  const productIds = Array.from(new Set((themeProducts ?? []).map(t => t.product_id)))
+    .filter(Boolean) as string[];
+  const productList: Product[] = productIds.map(id => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1) }));
+  const selectedId = (q && productIds.includes(q)) ? q : productIds[0];
 
   // Filter by product
-  const allThemes = rawThemes as Theme[];
-  const themes = allThemes.filter((t) => t.product_id === selectedId).slice(0, 5);
+  const { data: themes, error: themesErr } = await supabase
+    .from("themes")
+    .select("id, product_id, name, severity, trend, evidence_count, summary")
+    .eq("product_id", selectedId)
+    .limit(5);
+  if (themesErr) throw themesErr;
+  const themesArr = (themes ?? []) as Theme[]; // pin type for downstream callbacks
 
   // Do the same for actions
-  const allActions = rawActions as Action[];
-  const actionsByTheme = Object.groupBy(allActions, a => a.theme_id) as Record<string, Action[]>;
+  const themeIds = themesArr.map((t: Theme) => t.id);
+  const { data: actionsRaw, error: actionsErr } = await supabase
+    .from("actions")
+    .select("id, theme_id, kind, description, impact, effort")
+    .in("theme_id", themeIds.length ? themeIds : ["__none__"]); // guard to avoid full-scan when empty
+  if (actionsErr) throw actionsErr;
+  const actionsArr = (actionsRaw ?? []) as Action[];
+  const actionsByTheme = Object.groupBy(actionsArr, (a: Action) => a.theme_id) as Record<string, Action[]>;
 
-  const trends: TrendPoint[] = (mockTrendData as unknown[])
-  .filter(isTrend) // optional; remove if you trust the JSON
-  .filter((d) => d.product_id === selectedId)
-  .map(({ week, themes }) => ({ week, themes }));
+  // const trends: TrendPoint[] = (mockTrendData as unknown[])
+  // .filter(isTrend) // optional; remove if you trust the JSON
+  // .filter((d) => d.product_id === selectedId)
+  // .map(({ week, themes }) => ({ week, themes }));
   // const reviewsCount = (mockReviews as any[]).filter((r) => r.product_id === selectedId).length;
-  const evidencePoints = themes.reduce((sum, t) => sum + (t.evidence_count || 0), 0);
-  const actionItems = allActions.length;
+  // Optional: if you created a weekly view/materialized view for trends, use it here.
+  // Fallback to empty dataset if the view doesn't exist yet (keeps UI stable).
+  let trends: TrendPoint[] = [];
+  const { data: trendRows, error: trendsErr } = await supabase
+    .from("theme_trends") // <- create as (product_id text, week date, themes int)
+    .select("week, themes")
+    .eq("product_id", selectedId)
+    .order("week", { ascending: true });
+  if (!trendsErr && Array.isArray(trendRows)) {
+    const trendRowsArr = (trendRows ?? []) as TrendRow[];
+    trends = trendRowsArr.map(({ week, themes }: TrendRow) => ({ week, themes })) as TrendPoint[];
+  }
+
+  const evidencePoints = themesArr.reduce((sum: number, t: Theme) => sum + (t.evidence_count || 0), 0);
+  const actionItems = actionsArr.length;
 
   // Consolidated Top Actions (compact summary)
-  const themeNameById = new Map(themes.map(t => [t.id, t.name]));
-  const topActions = allActions
-  .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
-  .map(a => ({ ...a, score: a.impact_score - a.effort_score * 0.5 }))
-  .sort((a, b) => b.score - a.score)
-  .slice(0, 5);
+  const themeNameById = new Map<string, string>(themesArr.map((t: Theme) => [t.id, t.name]));
+  const topActions = actionsArr
+    .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
+    .map(a => ({ ...a, score: a.impact - a.effort * 0.5 }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 
   return (
     <div className="container mx-auto max-w-7xl space-y-6">
@@ -109,7 +144,7 @@ export default async function Dashboard({
           </h1>
           <p className="body-ink -mt-1">Latest insights for the selected product</p>
         </div>
-        <ProductPicker />
+        <ProductPicker products={productList}/>
       </div>
 
       {/* ===== Stats Overview ===== */}
@@ -120,7 +155,7 @@ export default async function Dashboard({
               <AlertTriangle className="h-5 w-5 text-severity-high" />
               <div>
                 <p className="text-2xl font-bold">
-                  {themes.filter((t) => t.severity === "high").length}
+                  {themes.filter((t: Theme) => t.severity === "high").length}
                 </p>
                 <p className="text-sm text-muted-foreground">High Severity Issues</p>
               </div>
@@ -179,7 +214,7 @@ export default async function Dashboard({
           </div>
 
           <div className="space-y-4">
-            {themes.map((theme) => (
+            {themesArr.map((theme: Theme) => (
               <ThemeCard key={theme.id} theme={theme} actions={actionsByTheme[theme.id] ?? []}/>
             ))}
           </div>
@@ -200,8 +235,8 @@ export default async function Dashboard({
               ) : (
                 topActions.map((a) => (
                   <div key={a.id} className="flex items-start gap-2 p-2 rounded bg-secondary">
-                    <div className={cn("p-1 rounded", a.type === "product" ? "bg-primary/10" : "bg-accent/10")}>
-                      {a.type === "product" ? (
+                    <div className={cn("p-1 rounded", a.kind === "product" ? "bg-primary/10" : "bg-accent/10")}>
+                      {a.kind === "product" ? (
                         <Target className="h-3 w-3 text-primary" />
                       ) : (
                         <Rocket className="h-3 w-3 text-accent" />
@@ -210,7 +245,7 @@ export default async function Dashboard({
                     <div className="text-sm">
                       <div className="font-medium">{a.description}</div>
                       <div className="text-xs text-muted-foreground">
-                        {a.type.toUpperCase()} • {a.themeName} • Impact {a.impact_score}/10 · Effort {a.effort_score}/10
+                        {a.kind.toUpperCase()} • {a.themeName} • Impact {a.impact}/10 · Effort {a.effort}/10
                       </div>
                     </div>
                   </div>
@@ -285,8 +320,8 @@ function ThemeCard({ theme, actions }: ThemeCardProps) {
           <div className="space-y-2">
             {actions.map((action: Action) => (
               <div key={action.id} className="flex items-start gap-2 p-3 bg-secondary rounded-lg">
-                <div className={cn("p-1 rounded", action.type === "product" ? "bg-primary/10" : "bg-accent/10")}>
-                  {action.type === "product" ? (
+                <div className={cn("p-1 rounded", action.kind === "product" ? "bg-primary/10" : "bg-accent/10")}>
+                  {action.kind === "product" ? (
                     <Target className="h-3 w-3 text-primary" />
                   ) : (
                     <Rocket className="h-3 w-3 text-accent" />
@@ -296,10 +331,10 @@ function ThemeCard({ theme, actions }: ThemeCardProps) {
                   <p className="text-sm text-foreground">{action.description}</p>
                   <div className="mt-1 flex items-center gap-3">
                     <Badge variant="outline" className="text-[0.72rem]">
-                      {action.type.toUpperCase()}
+                      {action.kind.toUpperCase()}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      Impact: {action.impact_score}/10 • Effort: {action.effort_score}/10
+                      Impact: {action.impact}/10 • Effort: {action.effort}/10
                     </span>
                   </div>
                 </div>
