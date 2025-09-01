@@ -25,5 +25,14 @@
     "review_date": "2025-08-07",
     "body": "Performance gets slow on big bases; syncing is unreliable at times.",
     "meta": { "url": "https://trustpilot.example/airtable/3" }
+  },
+  {
+    "id": "r4",
+    "product_id": "airtable",   
+    "source": "trustpilot",
+    "rating": 5,
+    "review_date": "2025-08-30",  
+    "body": "Test insert via Day 9 route.",
+    "meta": { "url": "https://trustpilot.example/airtable/4" }
   }
 ]
