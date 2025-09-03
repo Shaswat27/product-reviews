@@ -42,9 +42,13 @@ export async function embedTextBatch(texts: string[]) {
       input: texts,
     }); 
     return res.data.map((d) => l2(d.embedding as unknown as number[]));
-  } catch (e: any) {
-    console.error("[embedTextBatch] OpenAI error:", e?.message || e);
-    throw e;
+  } catch (e: unknown) {
+    if (e instanceof Error) {
+      console.error("[embedTextBatch] OpenAI error:", e.message);
+      throw e;
+    }
+    console.error("[embedTextBatch] Unknown error:", e);
+    throw new Error(String(e));
   }
 }
 

@@ -34,10 +34,13 @@ async function main() {
     .select("review_id");
   if (eErr) throw eErr;
 
-  const existing = new Set((embeds ?? []).map((x: any) => x.review_id));
+  type ReviewRow = { id: string; body: string; product_id: string };
+  type EmbeddingRow = { review_id: string };
+
+  const existing = new Set((embeds ?? []).map((x: EmbeddingRow) => x.review_id));
   const missing: ReviewForEmbedding[] = (reviews ?? [])
-    .filter((r: any) => !existing.has(r.id))
-    .map((r: any) => ({ id: r.id, content: r.body }));
+    .filter((r: ReviewRow) => !existing.has(r.id))
+    .map((r: ReviewRow) => ({ id: r.id, content: r.body }));
 
   console.log(
     `[backfill] total reviews=${reviews?.length ?? 0}, have embeddings=${

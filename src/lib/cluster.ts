@@ -1,11 +1,12 @@
 // lib/cluster.ts
 import { createClient } from "@supabase/supabase-js";
-// @ts-ignore
+import type { PostgrestError } from "@supabase/supabase-js";
+// @ts-expect-error: density-clustering has no types
 import * as DC from "density-clustering";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_ANON_KEY! // read-only is fine for fetch
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! // read-only is fine for fetch
 );
 
 type EmbRow = {
@@ -13,21 +14,31 @@ type EmbRow = {
   embedding: number[];
 };
 
+type ReviewEmbeddingRow = {
+  id: string;
+  product_id: string;
+  review_embeddings: { embedding: number[] }[] | null;
+};
+
 // lib/cluster.ts (fetch)
-export async function fetchEmbeddingsByProduct(productId: string) {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select("id, product_id, review_embeddings(embedding)")
-    .eq("product_id", productId);
+export async function fetchEmbeddingsByProduct(
+  productId: string
+): Promise<EmbRow[]> {
+  const { data, error }: { data: ReviewEmbeddingRow[] | null; error: PostgrestError | null } =
+    await supabase
+      .from("reviews")
+      .select("id, product_id, review_embeddings(embedding)")
+      .eq("product_id", productId)
+      .returns<ReviewEmbeddingRow[]>();
 
   if (error) throw error;
 
   // Flatten rows that actually have an embedding
   return (data ?? [])
-    .filter((r: any) => r.review_embeddings?.[0]?.embedding)
-    .map((r: any) => ({
+    .filter((r) => r.review_embeddings?.[0]?.embedding)
+    .map((r) => ({
       review_id: r.id,
-      embedding: r.review_embeddings[0].embedding as number[],
+      embedding: r.review_embeddings![0].embedding,
     }));
 }
 
@@ -40,16 +51,16 @@ export async function clusterReviewsByProduct(
   productId: string,
   opts: { eps?: number; minPts?: number } = {}
 ): Promise<Record<number, string[]>> {
-  const eps = opts.eps ?? 0.18;     // try 0.10–0.30
-  const minPts = opts.minPts ?? 6;  // try 5–10
+  const eps = opts.eps ?? 0.18; // try 0.10–0.30
+  const minPts = opts.minPts ?? 6; // try 5–10
 
   const rows = await fetchEmbeddingsByProduct(productId);
   if (rows.length === 0) return {};
 
   const vectors = rows.map((r) => r.embedding);
 
-  const dbscan = new (DC as any).DBSCAN();
   // density-clustering uses its own distance; omit to use Euclidean by default.
+  const dbscan = new DC.DBSCAN();
   const clusters: number[][] = dbscan.run(vectors, eps, minPts);
 
   // Map cluster index -> review_ids
