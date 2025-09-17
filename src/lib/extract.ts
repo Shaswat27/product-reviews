@@ -29,7 +29,7 @@ export type Extracted = z.infer<typeof ExtractedZ>;
 /* ---------- Client ---------- */
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
 // Use the exact model id you provided
-const MODEL = "claude-3-5-haiku-20241022";
+const MODEL = "claude-3-5-haiku-latest";
 
 /* ---------- Prompt loader (from .md) ---------- */
 let _systemCache: string | null = null;

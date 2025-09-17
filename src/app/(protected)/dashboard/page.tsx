@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import ProductPicker from "@/components/ProductPicker";
+import GenerateActionsButton from "@/components/GenerateActionsButton";
 
 // Supabase
 import { supabaseServerRead } from "@/lib/supabaseServerRead";
@@ -22,8 +23,9 @@ type Action = {
   theme_id: string;
   kind: "product" | "gtm";
   description: string;
-  impact: number;
-  effort: number;
+  impact: number; // 1-5 in DB
+  effort: number; // 1-5 in DB
+  evidence?: Array<{ type: string; id: string; note?: string }>; // optional, not used in UI yet
 };
 type Theme = {
   id: string;
@@ -98,11 +100,15 @@ export default async function Dashboard({
   const themeIds = themesArr.map((t: Theme) => t.id);
   const { data: actionsRaw, error: actionsErr } = await supabase
     .from("actions")
-    .select("id, theme_id, kind, description, impact, effort")
+    .select("id, theme_id, kind, description, impact, effort, evidence")
     .in("theme_id", themeIds.length ? themeIds : ["__none__"]); // guard to avoid full-scan when empty
   if (actionsErr) throw actionsErr;
   const actionsArr = (actionsRaw ?? []) as Action[];
-  const actionsByTheme = Object.groupBy(actionsArr, (a: Action) => a.theme_id) as Record<string, Action[]>;
+  // TS-safe groupBy without relying on stage-3 Object.groupBy
+  const actionsByTheme = actionsArr.reduce((acc, a) => {
+    (acc[a.theme_id] ||= []).push(a);
+    return acc;
+  }, {} as Record<string, Action[]>);
 
   // const trends: TrendPoint[] = (mockTrendData as unknown[])
   // .filter(isTrend) // optional; remove if you trust the JSON
@@ -129,7 +135,8 @@ export default async function Dashboard({
   const themeNameById = new Map<string, string>(themesArr.map((t: Theme) => [t.id, t.name]));
   const topActions = actionsArr
     .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
-    .map(a => ({ ...a, score: a.impact - a.effort * 0.5 }))
+    // Simple priority: higher impact, lower effort (both 1–5)
+    .map(a => ({ ...a, score: a.impact * 2 - a.effort })) // tune as you like
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 
@@ -245,7 +252,7 @@ export default async function Dashboard({
                     <div className="text-sm">
                       <div className="font-medium">{a.description}</div>
                       <div className="text-xs text-muted-foreground">
-                        {a.kind.toUpperCase()} • {a.themeName} • Impact {a.impact}/10 · Effort {a.effort}/10
+                        {a.kind.toUpperCase()} • {a.themeName} • Impact {a.impact}/5 · Effort {a.effort}/5
                       </div>
                     </div>
                   </div>
@@ -307,9 +314,13 @@ function ThemeCard({ theme, actions }: ThemeCardProps) {
         </div>
 
         <div>
-          <CardTitle className="text-lg">{theme.name}</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg">{theme.name}</CardTitle>
+            <GenerateActionsButton themeId={theme.id} />
+          </div>
           <CardDescription className="mt-1">{theme.summary}</CardDescription>
         </div>
+
       </CardHeader>
 
       <CardContent>
@@ -318,7 +329,9 @@ function ThemeCard({ theme, actions }: ThemeCardProps) {
         <div className="space-y-3">
           <h4 className="text-sm font-medium text-foreground">Recommended Actions</h4>
           <div className="space-y-2">
-            {actions.map((action: Action) => (
+            {actions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recommended actions yet for this theme.</p>
+            ) : actions.map((action: Action) => (
               <div key={action.id} className="flex items-start gap-2 p-3 bg-secondary rounded-lg">
                 <div className={cn("p-1 rounded", action.kind === "product" ? "bg-primary/10" : "bg-accent/10")}>
                   {action.kind === "product" ? (
@@ -334,8 +347,14 @@ function ThemeCard({ theme, actions }: ThemeCardProps) {
                       {action.kind.toUpperCase()}
                     </Badge>
                     <span className="text-xs text-muted-foreground">
-                      Impact: {action.impact}/10 • Effort: {action.effort}/10
+                      Impact: {action.impact}/5 • Effort: {action.effort}/5
                     </span>
+                    {Array.isArray(action.evidence) && action.evidence.length > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Evidence: {action.evidence.map(e => e.id).slice(0,3).join(", ")}
+                        {action.evidence.length > 3 ? " +" + (action.evidence.length - 3) : ""}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
