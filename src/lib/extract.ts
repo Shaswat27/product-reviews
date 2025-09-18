@@ -40,20 +40,21 @@ let _systemCache: string | null = null;
  */
 function getSystemPrompt(exampleJson: string): string {
   if (_systemCache) return _systemCache;
-  const mdPath = path.resolve(process.cwd(), "src/prompts/extract.haiku.md");
-  if (fs.existsSync(mdPath)) {
-    const raw = fs.readFileSync(mdPath, "utf-8");
+  const mdPath = new URL("../prompts/extract.haiku.md", import.meta.url);
+  try {
+    const raw = fs.readFileSync(mdPath, "utf-8"); // fs can take a URL
     _systemCache = raw.replace("{{EXAMPLE_JSON}}", exampleJson.trim());
     return _systemCache;
-  }
-  // Fallback (rare – e.g., serverless bundle)
-  _systemCache = `
-You extract SaaS review signals for product strategy and GTM.
-Return ONLY valid JSON matching schema exactly.
-Schema: {"aspects":[{"aspect":"pricing|onboarding|support|performance|integrations|reporting|usability|reliability|feature_gap","sentiment":"positive|neutral|negative","severity":"low|medium|high","evidence":"<short quote>"}],"persona":{"company_size":"1-10|11-50|51-200|200+","industry":"<optional>"}}
-Example: ${exampleJson}
-Return ONLY JSON.`.trim();
+  } catch {
+  // fallback if file not bundled
+    _systemCache = `
+  You extract SaaS review signals for product strategy and GTM.
+  Return ONLY valid JSON matching schema exactly.
+  Schema: {"aspects":[{"aspect":"pricing|onboarding|support|performance|integrations|reporting|usability|reliability|feature_gap","sentiment":"positive|neutral|negative","severity":"low|medium|high","evidence":"<short quote>"}],"persona":{"company_size":"1-10|11-50|51-200|200+","industry":"<optional>"}}
+  Example: ${exampleJson}
+  Return ONLY JSON.`.trim();
   return _systemCache;
+  }
 }
 
 /* ---------- User prompt ---------- */

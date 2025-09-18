@@ -1,11 +1,13 @@
 // src/lib/synthesize.ts
-import fs from "fs";
-import path from "path";
+// import fs from "fs";
+// import path from "path";
+import fs from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
 
-const promptPath = path.resolve("src/prompts/synthesize.md");
-const systemPrompt = fs.readFileSync(promptPath, "utf-8");
+// const promptPath = path.resolve("src/prompts/synthesize.md");
+const promptPath = new URL("../prompts/synthesize.md", import.meta.url);
+const systemPrompt = await fs.readFile(promptPath, "utf8");
 
 function mustEnv(name: string) {
   const v = process.env[name];
