@@ -4,7 +4,15 @@ import { Suspense } from "react";
 import SidebarItems from "./SidebarItems";
 import { SelectedProductProvider } from "./providers/SelectedProductProvider";
 
-export const metadata = { title: "SignalLens", description: "Product review and customer feedback analysis tool" };
+
+export const metadata = {
+   title: "SignalLens", 
+   description: "Product review and customer feedback analysis tool", 
+   other: {
+    "trustpilot-one-time-domain-verification-id":
+      "4784bee8-c43b-44a3-bf3c-73cf39b417d0",
+  },
+};
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
