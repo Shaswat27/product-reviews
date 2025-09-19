@@ -32,7 +32,8 @@ export async function GET(req: NextRequest) {
     // const items = debug ? await exec() : await withCaches(key, exec, { hotTtlMin: 10 });
 
     return NextResponse.json({ items: Array.isArray(items) ? items : [] });
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message ?? "Internal error" }, { status: 500 });
+  } catch (e: unknown) {
+  const message = e instanceof Error ? e.message : String(e);
+  return NextResponse.json({ error: message ?? "Internal error" }, { status: 500 });
   }
 }
