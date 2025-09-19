@@ -11,7 +11,8 @@
     "test:extract-route": "tsx src/scripts/test-extract-route.ts",
     "test:cluster": "tsx src/scripts/test-cluster.ts",
     "label:themes": "tsx --env-file=.env.local src/scripts/label-themes.ts",
-    "synth:test": "cross-env TEST_THEME_ID=<uuid> --env-file=.env.local tsx src/scripts/test-synthesize.ts"
+    "synth:test": "cross-env TEST_THEME_ID=<uuid> --env-file=.env.local tsx src/scripts/test-synthesize.ts",
+    "trustpilot:test": "tsx --env-file=.env.local src/scripts/test-trustpilot-pulls.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.61.0",
@@ -33,6 +34,7 @@
     "lucide-react": "^0.542.0",
     "next": "15.5.0",
     "openai": "^5.16.0",
+    "outscraper": "^2.1.8",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "recharts": "^3.1.2",

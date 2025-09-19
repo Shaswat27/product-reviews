@@ -65,6 +65,9 @@ importers:
       openai:
         specifier: ^5.16.0
         version: 5.16.0(ws@8.18.3)(zod@4.1.3)
+      outscraper:
+        specifier: ^2.1.8
+        version: 2.1.8
       react:
         specifier: 19.1.0
         version: 19.1.0
@@ -2302,6 +2305,9 @@ packages:
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
+
+  outscraper@2.1.8:
+    resolution: {integrity: sha512-RddkjsL/okqQgGIvZ9/gmgHsyCFh8qwywOLKoSjq37+AAMPzFRHn/6Mu3LEKT1gVNHUOPt+w53IElTTMlnUDPA==}
 
   own-keys@1.0.1:
     resolution: {integrity: sha512-qFOyK5PjiWZd+QQIh+1jhdb9LpxTF0qs7Pm8o5QHYZ0M3vKqSqzsZaEB6oWlxZ+q2sJBMI/Ktgd2N5ZwQoRHfg==}
@@ -4966,6 +4972,8 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
       word-wrap: 1.2.5
+
+  outscraper@2.1.8: {}
 
   own-keys@1.0.1:
     dependencies:
