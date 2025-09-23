@@ -111,7 +111,7 @@ export async function labelClusterTheme(opts: {
 
   const msg = await anthropic.messages.create({
     model: "claude-3-5-haiku-latest",
-    temperature: 0.2,
+    temperature: 0,
     max_tokens: 400,
     system: promptTemplate,
     messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify(userPayload) }] }],

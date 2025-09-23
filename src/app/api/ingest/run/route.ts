@@ -9,6 +9,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { embedTextBatch } from "@/lib/embeddings";
+import Anthropic from "@anthropic-ai/sdk";
+import { labelClusterTheme, type LabeledTheme } from "@/lib/themes";
+import { type Severity, type EvidenceReview, explainEvidence, buildThemeDraft } from "@/lib/evidence";
+
+// Evidence selection defaults
+const EVIDENCE_K_DEFAULT = 5 as const;
 
 // ---------- Constants ----------
 const EMB_MODEL = "text-embedding-3-small" as const;
@@ -80,7 +86,8 @@ type Review = {
   body_sha?: string;
   source_url?: string;
 };
-type RunIngestionOpts = { debug?: "emb" | "clu" };
+
+type RunIngestionOpts = { debug?: "emb" | "clu" | "ev"};
 
 // ---------- Validation ----------
 function badRequest(message: string) {
@@ -145,6 +152,7 @@ async function fetchReviewsForQuarter(
         normalized_body,
         body_sha: sha256Str(normalized_body),
         source_url: undefined,
+        // Optional severity for evidence weighting; default "medium" elsewhere if unset
       } satisfies Review;
     })
     .sort((a, b) => {
@@ -349,6 +357,66 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
   return { clusters, items };
 }
 
+// ---------- Adapter: call labelClusterTheme using the picked evidence ----------
+// Feeds your themes.ts prompt with a minimal Extracted-map built from evidence.
+type AspectName =
+  | "pricing" | "onboarding" | "support" | "performance"
+  | "integrations" | "reporting" | "usability" | "reliability" | "feature_gap";
+type Extracted = {
+  aspects: Array<{
+    aspect: AspectName;
+    sentiment: "positive" | "neutral" | "negative";
+    severity: "low" | "medium" | "high";
+    evidence: string;
+  }>;
+  persona?: { company_size?: "1-10" | "11-50" | "51-200" | "200+"; industry?: string };
+};
+
+const DEFAULT_THEME_PROMPT =
+  "You are a concise product ops assistant. Given sample quotes and top aspects, return a short theme name, a 1–2 sentence summary, and severity. Output strict JSON.";
+
+async function llmNameAndSummarizeUsingThemes(
+  _centroid6: readonly number[],
+  evidence: ReadonlyArray<EvidenceReview>,
+  {
+    productId,
+    clusterId,
+    promptTemplate = DEFAULT_THEME_PROMPT,
+    anthropicApiKey = process.env.ANTHROPIC_API_KEY,
+  }: { productId: string; clusterId: string; promptTemplate?: string; anthropicApiKey?: string },
+): Promise<{ name: string; summary: string; severity: Severity }> {
+  if (!anthropicApiKey) {
+    // Deterministic fallback when key missing
+    return { name: "Theme (stub)", summary: "Summary (stub)", severity: "medium" };
+  }
+  const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+
+  // Minimal deterministic stand-in for Stage-1 extracts using evidence quotes.
+  const extractedByReviewId = new Map<string, Extracted>();
+  for (const r of evidence) {
+    const quote = (r.body ?? "").trim().slice(0, 180);
+    extractedByReviewId.set(r.id, {
+      aspects: [{
+        aspect: "usability",
+        sentiment: "neutral",
+        // EvidenceReview currently has no severity; default to medium
+        severity: (r as any).severity ?? "medium",
+        evidence: quote,
+      }],
+    });
+  }
+  const labeled: LabeledTheme = await labelClusterTheme({
+    anthropic,
+    promptTemplate,
+    productId,
+   clusterId,
+    reviewIds: evidence.map(e => e.id),
+   extractedByReviewId,
+    maxQuotes: 6,
+  });
+  return { name: labeled.name, summary: labeled.summary, severity: labeled.severity };
+}
+
 // ---------- Pipeline ----------
 async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts) {
   const { businessUnitId, quarter, limit } = input;
@@ -392,13 +460,55 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
     return { step: "clu", clusters: out };
   }
 
-  // TODO: Evidence selection → LLM naming/summary (temp=0) → actions (temp=0) → persist
+  // ---------- Evidence selection + Theme draft wiring ----------
+  // Use the same reviews array as EvidenceReview[] (compatible subset)
+  const reviewsForEvidence: EvidenceReview[] = reviews.map((r) => ({
+    id: r.id,
+    body: r.body ?? "",
+    review_date: r.review_date,
+    // If you later add r.severity, it will be picked up automatically
+  }));
+
+  // Build drafts per cluster with deterministic picks
+  const themes = [];
+  for (const c of clusters) {
+    const draft = await buildThemeDraft(
+      { id: c.id, centroid6: c.centroid6, memberIdxs: c.memberIdxs },
+      reviewsForEvidence,
+      EVIDENCE_K_DEFAULT,
+      async (centroid6, evidence) =>
+        llmNameAndSummarizeUsingThemes(centroid6, evidence, {
+          productId: businessUnitId,
+          clusterId: c.id,
+          // Optionally pass a custom promptTemplate here
+          // promptTemplate: YOUR_THEME_PROMPT,
+        }),
+    );
+    themes.push(draft);
+  }
+
+  // Optional debug for evidence selection
+  if (opts?.debug === "ev") {
+    const debugClusters = clusters.map((c) => {
+      const members = c.memberIdxs.map((i) => reviewsForEvidence[i]);
+      return {
+        id: c.id,
+        size: c.size,
+        centroidPreview: c.centroid6.slice(0, 8),
+        evidence: explainEvidence(members, EVIDENCE_K_DEFAULT),
+      };
+    });
+    return { step: "ev", clusters: debugClusters };
+  }
+
+  // TODO (Day 17): deterministic LLM name/summary with cache + actions synthesis
   return {
     ok: true,
     processed: reviews.length,
     unit: businessUnitId,
     quarter,
     manifestId,
+    themes,
   };
 }
 
@@ -407,7 +517,10 @@ export async function POST(req: Request) {
   const isProd = process.env.NODE_ENV === "production";
   const url = new URL(req.url);
   const rawDebug = url.searchParams.get("debug") ?? "";
-  const debug: "emb" | "clu" | undefined = rawDebug === "emb" || rawDebug === "clu" ? rawDebug : undefined;
+  const debug = ((): "emb" | "clu" | "ev" | undefined => {
+    if (rawDebug === "emb" || rawDebug === "clu" || rawDebug === "ev") return rawDebug;
+    return undefined;
+  })();
 
   let json: unknown;
   try {
