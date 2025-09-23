@@ -4,10 +4,14 @@
 import fs from "node:fs/promises";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import promptText from "@/prompts/synthesize.md";
 
 // const promptPath = path.resolve("src/prompts/synthesize.md");
-const promptPath = new URL("../prompts/synthesize.md", import.meta.url);
-const systemPrompt = await fs.readFile(promptPath, "utf8");
+// TEMP debug
+//const promptPath = new URL("../prompts/synthesize.md", import.meta.url);
+// eslint-disable-next-line no-console
+//console.log('synthesize: reading prompt from ->', promptText);
+//const systemPrompt = await fs.readFile(promptPath, "utf8");
 
 function mustEnv(name: string) {
   const v = process.env[name];
@@ -39,7 +43,7 @@ export async function synthesizeTheme(theme: {
         content: [
           {
             type: "input_text",
-            text: systemPrompt,
+            text: String(promptText),
           },
         ],
       },

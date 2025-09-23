@@ -1,38 +1,24 @@
 [
-  {
-    "id": "r1",
-    "product_id": "notion",
-    "source": "trustpilot",
-    "rating": 3,
-    "review_date": "2025-08-05",
-    "body": "Pricing tiers are confusing and the free plan limits essential blocks.",
-    "meta": { "url": "https://trustpilot.example/notion/1" }
+  { 
+    "product_id": "notion.so", 
+    "rating": null, 
+    "review_date": "2025-09-18",
+    "body": "Nonexistent customer support for paid customers — Great software. Totally unsatisfactory customer support for paid customers. Notion's AI pointed me to a feature that turned out to be nonexistent. So I reached out to the Notion team for advice on how to solve a very simple issue, given that there was no explanation in the support documentation and the AI hallucinated. It took a couple days for a specialist to get back to me. The answer was essentially: I can't give you a workaround, but you can pay for a specialist or ask the Notion community. Awful. I get better customer support from virtually every other SaaS company.", 
+    "normalized_body": "nonexistent customer support for paid customers — great software. totally unsatisfactory customer support for paid customers. notion's ai pointed me to a feature that turned out to be nonexistent. so i reached out to the notion team for advice on how to solve a very simple issue, given that there was no explanation in the support documentation and the ai hallucinated. it took a couple days for a specialist to get back to me. the answer was essentially: i can't give you a workaround, but you can pay for a specialist or ask the notion community. awful. i get better customer support from virtually every other saas company.", 
+    "body_sha": "e050b54345d650cc99c5b0b00972837f0830a42ed43856ee15f5e063a2c80b18", 
+    "source_url": "https://www.trustpilot.com/reviews/68cc214296c6aa882b1c0fce", 
+    "meta": { "author": null, "outscraper_id": null }, 
+    "source_id": null 
   },
-  {
-    "id": "r2",
-    "product_id": "notion",
-    "source": "g2",
-    "rating": 4,
-    "review_date": "2025-08-10",
-    "body": "Love the templates but onboarding teammates takes too long.",
-    "meta": { "url": "https://g2.example/notion/2" }
-  },
-  {
-    "id": "r3",
-    "product_id": "airtable",
-    "source": "trustpilot",
-    "rating": 2,
-    "review_date": "2025-08-07",
-    "body": "Performance gets slow on big bases; syncing is unreliable at times.",
-    "meta": { "url": "https://trustpilot.example/airtable/3" }
-  },
-  {
-    "id": "r4",
-    "product_id": "airtable",   
-    "source": "trustpilot",
-    "rating": 5,
-    "review_date": "2025-08-30",  
-    "body": "Test insert via Day 9 route.",
-    "meta": { "url": "https://trustpilot.example/airtable/4" }
+  { 
+    "product_id": "notion.so", 
+    "rating": null, 
+    "review_date": "2025-09-16", 
+    "body": "j'adore cette app la c'est le meilleur — j'adore cette app la c'est le meilleur", 
+    "normalized_body": "j'adore cette app la c'est le meilleur — j'adore cette app la c'est le meilleur", 
+    "body_sha": "7af4ff2fe90221d9221988a6ecd91674a46dbf56058d337df461db9ae57298f3", 
+    "source_url": "https://www.trustpilot.com/reviews/68c95933ccf11f97d21bbdd1", 
+    "meta": { "author": null, "outscraper_id": null }, 
+    "source_id": null
   }
 ]
