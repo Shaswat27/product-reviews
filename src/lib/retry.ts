@@ -20,6 +20,22 @@ export function isTransportError(err: unknown): boolean {
   );
 }
 
+function toError(x: unknown): Error {
+  if (x instanceof Error) return x;
+  // Preserve structured info if available
+  if (x && typeof x === "object") {
+    const maybe = x as Partial<TransportishError>;
+    const msg = maybe.message ??
+      ((): string => {
+        try { return JSON.stringify(x); } catch { return String(x); }
+      })();
+    const err = new Error(msg);
+    if (maybe.name) err.name = maybe.name;
+    return err;
+  }
+  return new Error(String(x));
+}
+
 /** Fixed backoff (deterministic). Defaults: 2 attempts, 300ms wait. */
 export async function withTransportRetry<T>(
   fn: () => Promise<T>,
@@ -31,11 +47,13 @@ export async function withTransportRetry<T>(
       return await fn();
     } catch (err) {
       last = err;
-      if (attempt >= maxAttempts || !isTransportError(err)) throw err;
+      if (attempt >= maxAttempts || !isTransportError(err)) {
+        // Re-throw as an Error to satisfy @typescript-eslint/only-throw-error
+        throw toError(err);
+      }
       await new Promise((r) => setTimeout(r, backoffMs)); // deterministic wait
     }
   }
-  // should never reach
-  // eslint-disable-next-line @typescript-eslint/no-throw-literal
-  throw last;
+  // Should be unreachable, but keep types/lint happy:
+  throw toError(last);
 }
