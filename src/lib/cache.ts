@@ -13,6 +13,9 @@ const inflight = new Map<string, Promise<unknown>>();
 const dedupe = new Map<string, number>();
 const spendCounter = new Map<string, number>(); // key = YYYY-MM-DD
 
+// global cache helpers
+export const PROMPT_VERSION = 1 as const; // bump to invalidate cached LLM outputs
+
 function now() { return Date.now(); }
 function msFromMinutes(m: Minutes) { return m * 60_000; }
 

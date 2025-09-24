@@ -1,5 +1,8 @@
 import { z } from "zod";
+import {PROMPT_VERSION} from "@/lib/cache"
 import Anthropic from "@anthropic-ai/sdk";
+import {supabaseServerRead} from "@/lib/supabaseServerRead";
+import {withTransportRetry} from "@/lib/retry";
 
 type AspectName =
   | "pricing" | "onboarding" | "support" | "performance"
@@ -66,6 +69,19 @@ function titleFromAspects(as: string[]): string | null {
   return m[as[0]] ?? as[0].replace(/_/g, " ");
 }
 
+export async function getThemeFromTable(clusterId: string) {
+  const s = await supabaseServerRead();
+  const { data, error } = await s
+    .from("themes")
+    .select("id, name, summary, severity, evidence_count")
+    .eq("cluster_id", clusterId)
+    .eq("prompt_version", PROMPT_VERSION)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data; // null = cache miss
+}
+
 /**
  * Label a single cluster -> {name, summary, severity, evidence_count}
  * Accepts the minimal shape your cluster function returns once expanded.
@@ -80,6 +96,16 @@ export async function labelClusterTheme(opts: {
   maxQuotes?: number;
 }): Promise<LabeledTheme> {
   const { anthropic, promptTemplate, productId, clusterId, reviewIds, extractedByReviewId, maxQuotes = 6 } = opts;
+
+  const cached = await getThemeFromTable(String(clusterId));
+  if (cached) {
+    return {
+      name: cached.name,
+      summary: cached.summary,
+      severity: cached.severity,
+      evidence_count: cached.evidence_count ?? reviewIds.length,
+    };
+  }
 
   const aspects: AspectName[] = [];
   const severities: Array<"low"|"medium"|"high"> = [];
@@ -109,13 +135,15 @@ export async function labelClusterTheme(opts: {
     counts: { reviews_in_cluster: evidence_count },
   };
 
-  const msg = await anthropic.messages.create({
-    model: "claude-3-5-haiku-latest",
+  const msg = await withTransportRetry(() => anthropic.messages.create({
+    model: "claude-3-5-haiku-20241022",
     temperature: 0,
+    top_p: 1,
     max_tokens: 400,
     system: promptTemplate,
     messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify(userPayload) }] }],
-  });
+    })
+  );
 
   const raw = (msg.content?.[0] as { type: "text"; text: string } | undefined)?.text ?? "";
   const json = extractJson(raw);
@@ -131,4 +159,22 @@ export async function labelClusterTheme(opts: {
   }
 
   return { ...parsed.data, evidence_count };
+}
+
+export async function upsertThemeCached(row: {
+  manifest_id: string;
+  product_id: string;
+  cluster_id: string;
+  topic_key: string;
+  name: string;
+  summary: string;
+  severity: "low"|"medium"|"high";
+  evidence_count: number;
+}) {
+  const s = await supabaseServerRead();
+  const { error } = await s.from("themes").upsert(
+    { ...row, prompt_version: PROMPT_VERSION },
+    { onConflict: "cluster_id" } // adjust if your unique key differs
+  );
+  if (error) throw error;
 }

@@ -12,6 +12,9 @@ import { embedTextBatch } from "@/lib/embeddings";
 import Anthropic from "@anthropic-ai/sdk";
 import { labelClusterTheme, type LabeledTheme } from "@/lib/themes";
 import { type Severity, type EvidenceReview, explainEvidence, buildThemeDraft } from "@/lib/evidence";
+import { synthesizeTheme } from "@/lib/synthesize";
+
+const PROMPT_VERSION = 1 as const; // bump to invalidate LLM caches (Day-17)
 
 // Evidence selection defaults
 const EVIDENCE_K_DEFAULT = 5 as const;
@@ -21,6 +24,8 @@ const EMB_MODEL = "text-embedding-3-small" as const;
 const CLU_EPS = 0.12 as const;     // fixed per D16 plan (tune if needed)
 const CLU_MINPTS = 2 as const;     // fixed per D16 plan
 const INCLUDE_NOISE_AS_SINGLETONS = true as const;
+
+const PIPELINE_VERSION = "1.0.0" as const; 
 
 // ---------- Supabase ----------
 const db = createClient(
@@ -422,7 +427,19 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
   const { businessUnitId, quarter, limit } = input;
 
   const { start, end } = await resolveQuarterRange(quarter);
-  const manifestId = crypto.randomUUID(); // placeholder; persist later
+  const manifestId = crypto.randomUUID(); // keep this
+
+  const { error: manErr } = await db
+  .from("manifests")
+  .insert({
+      id: manifestId,                     // UUID you just generated
+      business_unit_id: businessUnitId,   // matches your schema
+      quarter,                            // "2025Q3"
+      start_date: start.toISOString(),    // or start (if column is date, cast server-side)
+      end_date: end.toISOString(),
+      pipeline_version: PIPELINE_VERSION,
+  });
+  if (manErr) throw manErr;
 
   const reviews = await fetchReviewsForQuarter(businessUnitId, start, end, limit);
   console.log("reviews fetched:", reviews.length, "range", start.toISOString(), end.toISOString(), "unit", businessUnitId);
@@ -471,20 +488,41 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
 
   // Build drafts per cluster with deterministic picks
   const themes = [];
-  for (const c of clusters) {
-    const draft = await buildThemeDraft(
-      { id: c.id, centroid6: c.centroid6, memberIdxs: c.memberIdxs },
-      reviewsForEvidence,
-      EVIDENCE_K_DEFAULT,
-      async (centroid6, evidence) =>
-        llmNameAndSummarizeUsingThemes(centroid6, evidence, {
-          productId: businessUnitId,
-          clusterId: c.id,
-          // Optionally pass a custom promptTemplate here
-          // promptTemplate: YOUR_THEME_PROMPT,
-        }),
-    );
-    themes.push(draft);
+for (const c of clusters) {
+  const draft = await buildThemeDraft(
+    { id: c.id, centroid6: c.centroid6, memberIdxs: c.memberIdxs },
+    reviewsForEvidence,
+    EVIDENCE_K_DEFAULT,
+    async (centroid6, evidence) =>
+      llmNameAndSummarizeUsingThemes(centroid6, evidence, {
+        productId: businessUnitId,
+        clusterId: c.id,
+      }),
+  );
+
+  // ⬇️ NEW: persist theme as cache + source of truth (and get UUID)
+  const topic_key = c.id.replace(/^cl_/, "");
+  const { data: themeRow, error: themeErr } = await db
+    .from("themes")
+    .upsert({
+      product_id: businessUnitId,
+      manifest_id: manifestId,            // ✅ FK now valid
+      cluster_id: c.id,
+      topic_key: c.id.replace(/^cl_/, ""),
+      prompt_version: PROMPT_VERSION,
+      evidence_count: draft.evidence_ids.length,
+      name: draft.name,
+      summary: draft.summary,
+      severity: draft.severity,
+    }, { onConflict: "cluster_id" })
+    .select("id, cluster_id")          
+    .single();
+  if (themeErr) throw themeErr;
+
+  themes.push(draft);
+
+  // Save the UUID on the draft object so we can use it for actions
+  (draft as any)._theme_uuid = themeRow.id;
   }
 
   // Optional debug for evidence selection
@@ -501,14 +539,36 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
     return { step: "ev", clusters: debugClusters };
   }
 
-  // TODO (Day 17): deterministic LLM name/summary with cache + actions synthesis
+  // ---------- Day 17: Actions synthesis (cache-first inside synthesizeTheme) ----------
+  // For each theme draft, build examples[] deterministically from the chosen evidence
+  const byId = new Map(reviewsForEvidence.map(r => [r.id, r]));
+
+  for (const t of themes) {
+    const examples = t.evidence_ids
+      .map(id => byId.get(id))
+      .filter((r): r is EvidenceReview => !!r)
+      .map(r => ({
+        snippet: (r.body ?? "").trim().slice(0, 180),
+        evidence: { type: "review", id: r.id },
+      }));
+
+    const themeUuid = (t as any)._theme_uuid as string; // from step 1
+
+    await synthesizeTheme({
+      theme_id: themeUuid,        // ✅ UUID that matches themes.id
+      theme: t.name,
+      summary: t.summary,
+      examples,
+    });
+  }
+
   return {
     ok: true,
     processed: reviews.length,
     unit: businessUnitId,
     quarter,
     manifestId,
-    themes,
+    themes, // same shape you already return
   };
 }
 
