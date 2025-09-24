@@ -25,7 +25,7 @@ const CLU_EPS = 0.12 as const;     // fixed per D16 plan (tune if needed)
 const CLU_MINPTS = 2 as const;     // fixed per D16 plan
 const INCLUDE_NOISE_AS_SINGLETONS = true as const;
 
-const PIPELINE_VERSION = "1.0.0" as const; 
+const PIPELINE_VERSION = "1.0.0" as const;
 
 // ---------- Supabase ----------
 const db = createClient(
@@ -58,21 +58,39 @@ function sha256Str(s: string): string {
 }
 
 // Coerce any Supabase vector-ish shape -> number[]
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+function hasNumberLength(x: unknown): x is { length: number } {
+  return isRecord(x) && typeof (x as { length?: unknown }).length === "number";
+}
+
 function toNumberArraySafe(v: unknown): number[] | null {
+  // 1) Already a number[]
   if (Array.isArray(v) && typeof v[0] === "number") return v as number[];
-  if (ArrayBuffer.isView(v) && typeof (v as any).length === "number") {
-    return Array.from(v as Float32Array | Float64Array);
+
+  // 2) Typed arrays (Float32Array, Float64Array, Int32Array, etc.)
+  // ArrayBufferView includes DataView (no length), so refine to array-like
+  if (ArrayBuffer.isView(v) && hasNumberLength(v)) {
+    // At this point, v is something like a TypedArray with numeric indices
+    // Cast via unknown -> ArrayLike<number> to satisfy TS without widening to any
+    return Array.from(v as unknown as ArrayLike<number>);
   }
+
+  // 3) JSON stringified vector
   if (typeof v === "string") {
     try {
-      const parsed = JSON.parse(v) as unknown;
+      const parsed: unknown = JSON.parse(v);
       if (Array.isArray(parsed) && typeof parsed[0] === "number") return parsed as number[];
     } catch { /* ignore */ }
   }
-  if (v && typeof v === "object" && "data" in (v as any)) {
-    const d = (v as any).data;
+
+  // 4) Objects like { data: number[] }
+  if (isRecord(v) && "data" in v) {
+    const d = (v as { data?: unknown }).data;
     if (Array.isArray(d) && typeof d[0] === "number") return d as number[];
   }
+
   return null;
 }
 
@@ -82,6 +100,7 @@ type IngestBody = {
   quarter: string; // e.g. 2025Q3
   limit?: number;
 };
+
 type Review = {
   id: string;
   product_id: string;
@@ -92,7 +111,14 @@ type Review = {
   source_url?: string;
 };
 
-type RunIngestionOpts = { debug?: "emb" | "clu" | "ev"};
+type RunIngestionOpts = { debug?: "emb" | "clu" | "ev" };
+
+// Supabase row helpers
+type ReviewTextEmbeddingRow = { body_sha: string; embedding: unknown };
+type ThemeRowShort = { id: string; cluster_id: string };
+
+// Draft type returned by buildThemeDraft
+type ThemeDraft = Awaited<ReturnType<typeof buildThemeDraft>>;
 
 // ---------- Validation ----------
 function badRequest(message: string) {
@@ -157,7 +183,6 @@ async function fetchReviewsForQuarter(
         normalized_body,
         body_sha: sha256Str(normalized_body),
         source_url: undefined,
-        // Optional severity for evidence weighting; default "medium" elsewhere if unset
       } satisfies Review;
     })
     .sort((a, b) => {
@@ -183,10 +208,11 @@ export async function getCachedEmbeddings(
 
   if (error) throw error;
 
+  const rows = (data ?? []) as ReviewTextEmbeddingRow[];
   const result: Record<string, number[]> = {};
-  for (const row of data ?? []) {
-    const coerced = toNumberArraySafe((row as any).embedding);
-    if (coerced) result[(row as any).body_sha] = coerced;
+  for (const row of rows) {
+    const coerced = toNumberArraySafe(row.embedding);
+    if (coerced) result[row.body_sha] = coerced;
   }
   return result;
 }
@@ -245,7 +271,6 @@ async function embedDeterministic(texts: string[], hashes: string[]): Promise<nu
     });
   }
 
-  // Final sanity log
   for (let i = 0; i < Math.min(2, out.length); i++) {
     console.log("emb:final.idxRow", { idx: i, body_sha: hashes[i], vecPreview: out[i]?.slice(0, 8) });
   }
@@ -265,7 +290,7 @@ function cosineDist(a: number[], b: number[]): number {
 }
 function centroid(indices: number[], items: Item[]): number[] {
   const dim = items[0]?.vec.length ?? 0;
-  const c = new Array(dim).fill(0);
+  const c = new Array(dim).fill(0) as number[];
   for (const i of indices) {
     const v = items[i].vec;
     for (let k = 0; k < dim; k++) c[k] += v[k];
@@ -308,7 +333,7 @@ function dbscanDeterministic(items: Item[], eps: number, minPts: number): number
     labels[i] = my;
     const queue: number[] = [i, ...N];
     while (queue.length) {
-      const q = queue.shift()!;
+      const q = queue.shift() as number;
       if (labels[q] === -1) labels[q] = my;
       if (labels[q] !== -99) continue;
       labels[q] = my;
@@ -327,7 +352,6 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
 }> {
   if (vectors.length !== reviews.length) throw new Error("vectors/reviews length mismatch");
 
-  // Canonical order already enforced upstream (product_id:date:id); keep parallel arrays
   const items: Item[] = reviews.map((r, i) => ({ idx: i, id: r.id, body_sha: r.body_sha!, vec: vectors[i] }));
   const labels = dbscanDeterministic(items, CLU_EPS, CLU_MINPTS);
 
@@ -339,14 +363,14 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
     by.set(lab, arr);
   });
 
-  const clusters = Array.from(by.entries()).map(([lab, idxs]) => {
-  const c = centroid(idxs, items);
-  const c6 = roundVector(c, 6);
-  const id = clusterIdFromCentroid6(c6);
-  return { id, size: idxs.length, centroid6: c6, memberIdxs: idxs };
+  const clusters = Array.from(by.entries()).map(([_, idxs]) => {
+    const c = centroid(idxs, items);
+    const c6 = roundVector(c, 6);
+    const id = clusterIdFromCentroid6(c6);
+    return { id, size: idxs.length, centroid6: c6, memberIdxs: idxs };
   });
 
-// NEW: deterministically convert noise to singleton clusters for debug
+  // Convert noise to singleton clusters for debug determinism
   if (INCLUDE_NOISE_AS_SINGLETONS) {
     for (let i = 0; i < labels.length; i++) {
       if (labels[i] < 0) {
@@ -357,13 +381,11 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
     }
   }
 
-  // Stable sort for output determinism
   clusters.sort((a, b) => a.id.localeCompare(b.id));
   return { clusters, items };
 }
 
 // ---------- Adapter: call labelClusterTheme using the picked evidence ----------
-// Feeds your themes.ts prompt with a minimal Extracted-map built from evidence.
 type AspectName =
   | "pricing" | "onboarding" | "support" | "performance"
   | "integrations" | "reporting" | "usability" | "reliability" | "feature_gap";
@@ -400,12 +422,13 @@ async function llmNameAndSummarizeUsingThemes(
   const extractedByReviewId = new Map<string, Extracted>();
   for (const r of evidence) {
     const quote = (r.body ?? "").trim().slice(0, 180);
+    const sev =
+      (r as EvidenceReview & { severity?: Severity }).severity ?? "medium";
     extractedByReviewId.set(r.id, {
       aspects: [{
         aspect: "usability",
         sentiment: "neutral",
-        // EvidenceReview currently has no severity; default to medium
-        severity: (r as any).severity ?? "medium",
+        severity: sev,
         evidence: quote,
       }],
     });
@@ -414,9 +437,9 @@ async function llmNameAndSummarizeUsingThemes(
     anthropic,
     promptTemplate,
     productId,
-   clusterId,
+    clusterId,
     reviewIds: evidence.map(e => e.id),
-   extractedByReviewId,
+    extractedByReviewId,
     maxQuotes: 6,
   });
   return { name: labeled.name, summary: labeled.summary, severity: labeled.severity };
@@ -427,18 +450,18 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
   const { businessUnitId, quarter, limit } = input;
 
   const { start, end } = await resolveQuarterRange(quarter);
-  const manifestId = crypto.randomUUID(); // keep this
+  const manifestId = crypto.randomUUID();
 
   const { error: manErr } = await db
-  .from("manifests")
-  .insert({
-      id: manifestId,                     // UUID you just generated
-      business_unit_id: businessUnitId,   // matches your schema
-      quarter,                            // "2025Q3"
-      start_date: start.toISOString(),    // or start (if column is date, cast server-side)
+    .from("manifests")
+    .insert({
+      id: manifestId,
+      business_unit_id: businessUnitId,
+      quarter,
+      start_date: start.toISOString(),
       end_date: end.toISOString(),
       pipeline_version: PIPELINE_VERSION,
-  });
+    });
   if (manErr) throw manErr;
 
   const reviews = await fetchReviewsForQuarter(businessUnitId, start, end, limit);
@@ -455,7 +478,7 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
     const sample = vectors[0];
     console.log("emb:firstVecPreview", previewVec(sample, 8));
     return {
-      step: "emb",
+      step: "emb" as const,
       usedModel: EMB_MODEL,
       count: vectors.length,
       dim,
@@ -467,65 +490,60 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
   const { clusters, items } = await clusterDeterministic(vectors, reviews);
 
   if (opts?.debug === "clu") {
-    // compact cluster info for debugging
     const out = clusters.map((c) => ({
       id: c.id,
       size: c.size,
       centroidPreview: c.centroid6.slice(0, 8),
       memberIds: c.memberIdxs.map((i) => items[i].body_sha).slice(0, 10),
     }));
-    return { step: "clu", clusters: out };
+    return { step: "clu" as const, clusters: out };
   }
 
-  // ---------- Evidence selection + Theme draft wiring ----------
-  // Use the same reviews array as EvidenceReview[] (compatible subset)
+  // Evidence selection + Theme draft wiring
   const reviewsForEvidence: EvidenceReview[] = reviews.map((r) => ({
     id: r.id,
     body: r.body ?? "",
     review_date: r.review_date,
-    // If you later add r.severity, it will be picked up automatically
   }));
 
-  // Build drafts per cluster with deterministic picks
-  const themes = [];
-for (const c of clusters) {
-  const draft = await buildThemeDraft(
-    { id: c.id, centroid6: c.centroid6, memberIdxs: c.memberIdxs },
-    reviewsForEvidence,
-    EVIDENCE_K_DEFAULT,
-    async (centroid6, evidence) =>
-      llmNameAndSummarizeUsingThemes(centroid6, evidence, {
-        productId: businessUnitId,
-        clusterId: c.id,
-      }),
-  );
+  // Build drafts per cluster deterministically
+  const themes: Array<{ draft: ThemeDraft; uuid: string }> = [];
 
-  // ⬇️ NEW: persist theme as cache + source of truth (and get UUID)
-  const topic_key = c.id.replace(/^cl_/, "");
-  const { data: themeRow, error: themeErr } = await db
-    .from("themes")
-    .upsert({
-      product_id: businessUnitId,
-      manifest_id: manifestId,            // ✅ FK now valid
-      cluster_id: c.id,
-      topic_key: c.id.replace(/^cl_/, ""),
-      prompt_version: PROMPT_VERSION,
-      evidence_count: draft.evidence_ids.length,
-      name: draft.name,
-      summary: draft.summary,
-      severity: draft.severity,
-    }, { onConflict: "cluster_id" })
-    .select("id, cluster_id")          
-    .single();
-  if (themeErr) throw themeErr;
+  for (const c of clusters) {
+    const draft = await buildThemeDraft(
+      { id: c.id, centroid6: c.centroid6, memberIdxs: c.memberIdxs },
+      reviewsForEvidence,
+      EVIDENCE_K_DEFAULT,
+      async (centroid6, evidence) =>
+        llmNameAndSummarizeUsingThemes(centroid6, evidence, {
+          productId: businessUnitId,
+          clusterId: c.id,
+        }),
+    );
 
-  themes.push(draft);
+    // Persist theme and obtain UUID
+    const topic_key = c.id.replace(/^cl_/, "");
+    const { data: themeRow, error: themeErr } = await db
+      .from("themes")
+      .upsert({
+        product_id: businessUnitId,
+        manifest_id: manifestId,
+        cluster_id: c.id,
+        topic_key,
+        prompt_version: PROMPT_VERSION,
+        evidence_count: draft.evidence_ids.length,
+        name: draft.name,
+        summary: draft.summary,
+        severity: draft.severity,
+      }, { onConflict: "cluster_id" })
+      .select("id, cluster_id")
+      .single();
+    if (themeErr) throw themeErr;
 
-  // Save the UUID on the draft object so we can use it for actions
-  (draft as any)._theme_uuid = themeRow.id;
+    const typedThemeRow = themeRow as ThemeRowShort;
+    themes.push({ draft, uuid: typedThemeRow.id });
   }
 
-  // Optional debug for evidence selection
   if (opts?.debug === "ev") {
     const debugClusters = clusters.map((c) => {
       const members = c.memberIdxs.map((i) => reviewsForEvidence[i]);
@@ -536,39 +554,36 @@ for (const c of clusters) {
         evidence: explainEvidence(members, EVIDENCE_K_DEFAULT),
       };
     });
-    return { step: "ev", clusters: debugClusters };
+    return { step: "ev" as const, clusters: debugClusters };
   }
 
-  // ---------- Day 17: Actions synthesis (cache-first inside synthesizeTheme) ----------
-  // For each theme draft, build examples[] deterministically from the chosen evidence
+  // Actions synthesis — build examples[] deterministically from evidence
   const byId = new Map(reviewsForEvidence.map(r => [r.id, r]));
 
-  for (const t of themes) {
-    const examples = t.evidence_ids
+  for (const { draft, uuid } of themes) {
+    const examples = draft.evidence_ids
       .map(id => byId.get(id))
       .filter((r): r is EvidenceReview => !!r)
       .map(r => ({
         snippet: (r.body ?? "").trim().slice(0, 180),
-        evidence: { type: "review", id: r.id },
+        evidence: { type: "review" as const, id: r.id },
       }));
 
-    const themeUuid = (t as any)._theme_uuid as string; // from step 1
-
     await synthesizeTheme({
-      theme_id: themeUuid,        // ✅ UUID that matches themes.id
-      theme: t.name,
-      summary: t.summary,
+      theme_id: uuid,
+      theme: draft.name,
+      summary: draft.summary,
       examples,
     });
   }
 
   return {
-    ok: true,
+    ok: true as const,
     processed: reviews.length,
     unit: businessUnitId,
     quarter,
     manifestId,
-    themes, // same shape you already return
+    themes: themes.map(t => t.draft),
   };
 }
 
