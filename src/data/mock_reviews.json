@@ -20,5 +20,170 @@
     "source_url": "https://www.trustpilot.com/reviews/68c95933ccf11f97d21bbdd1", 
     "meta": { "author": null, "outscraper_id": null }, 
     "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 2,
+    "review_date": "2025-04-09",
+    "body": "Refund process is confusing — I was double charged and couldn't find a clear path to request a refund.",
+    "normalized_body": "refund process is confusing — i was double charged and couldn't find a clear path to request a refund.",
+    "body_sha": "1111111111111111111111111111111111111111111111111111111111111111",
+    "source_url": "https://example.com/reviews/1",
+    "meta": { "author": "A1", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 3,
+    "review_date": "2025-04-22",
+    "body": "Performance gets sluggish with large pages — indexing or search seems to hang for several seconds.",
+    "normalized_body": "performance gets sluggish with large pages — indexing or search seems to hang for several seconds.",
+    "body_sha": "2222222222222222222222222222222222222222222222222222222222222222",
+    "source_url": "https://example.com/reviews/2",
+    "meta": { "author": "A2", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 5,
+    "review_date": "2025-05-05",
+    "body": "Templates are fantastic — the gallery saved me hours setting up a CRM.",
+    "normalized_body": "templates are fantastic — the gallery saved me hours setting up a crm.",
+    "body_sha": "3333333333333333333333333333333333333333333333333333333333333333",
+    "source_url": "https://example.com/reviews/3",
+    "meta": { "author": "A3", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 2,
+    "review_date": "2025-05-19",
+    "body": "Export to CSV is incomplete — rollups and relations are missing, which breaks reporting.",
+    "normalized_body": "export to csv is incomplete — rollups and relations are missing, which breaks reporting.",
+    "body_sha": "4444444444444444444444444444444444444444444444444444444444444444",
+    "source_url": "https://example.com/reviews/4",
+    "meta": { "author": "A4", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 1,
+    "review_date": "2025-06-01",
+    "body": "Customer support is unresponsive — took over a week to get a canned reply.",
+    "normalized_body": "customer support is unresponsive — took over a week to get a canned reply.",
+    "body_sha": "5555555555555555555555555555555555555555555555555555555555555555",
+    "source_url": "https://example.com/reviews/5",
+    "meta": { "author": "A5", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 3,
+    "review_date": "2025-06-12",
+    "body": "Mobile offline mode is unreliable — edits disappear when reconnecting.",
+    "normalized_body": "mobile offline mode is unreliable — edits disappear when reconnecting.",
+    "body_sha": "6666666666666666666666666666666666666666666666666666666666666666",
+    "source_url": "https://example.com/reviews/6",
+    "meta": { "author": "A6", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": null,
+    "review_date": "2025-06-28",
+    "body": "AI suggestions hallucinate features that don't exist — misleading for new users.",
+    "normalized_body": "ai suggestions hallucinate features that don't exist — misleading for new users.",
+    "body_sha": "7777777777777777777777777777777777777777777777777777777777777777",
+    "source_url": "https://example.com/reviews/7",
+    "meta": { "author": null, "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 2,
+    "review_date": "2025-07-07",
+    "body": "Refunds still hard — live chat said to email a form, then silence for days.",
+    "normalized_body": "refunds still hard — live chat said to email a form, then silence for days.",
+    "body_sha": "8888888888888888888888888888888888888888888888888888888888888888",
+    "source_url": "https://example.com/reviews/8",
+    "meta": { "author": "B1", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 4,
+    "review_date": "2025-07-18",
+    "body": "Performance improved a bit but large databases are still slow to open.",
+    "normalized_body": "performance improved a bit but large databases are still slow to open.",
+    "body_sha": "9999999999999999999999999999999999999999999999999999999999999999",
+    "source_url": "https://example.com/reviews/9",
+    "meta": { "author": "B2", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 5,
+    "review_date": "2025-08-02",
+    "body": "Template marketplace keeps growing — love the new OKR kits.",
+    "normalized_body": "template marketplace keeps growing — love the new okr kits.",
+    "body_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source_url": "https://example.com/reviews/10",
+    "meta": { "author": "B3", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 3,
+    "review_date": "2025-08-12",
+    "body": "CSV export includes more fields now, but relations still flatten poorly.",
+    "normalized_body": "csv export includes more fields now, but relations still flatten poorly.",
+    "body_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "source_url": "https://example.com/reviews/11",
+    "meta": { "author": "B4", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 2,
+    "review_date": "2025-08-20",
+    "body": "Support escalations bounce between agents — no ownership, slow resolution.",
+    "normalized_body": "support escalations bounce between agents — no ownership, slow resolution.",
+    "body_sha": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "source_url": "https://example.com/reviews/12",
+    "meta": { "author": "B5", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 3,
+    "review_date": "2025-09-03",
+    "body": "Offline on iOS improved but still conflicts when syncing on desktop.",
+    "normalized_body": "offline on ios improved but still conflicts when syncing on desktop.",
+    "body_sha": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "source_url": "https://example.com/reviews/13",
+    "meta": { "author": "B6", "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": null,
+    "review_date": "2025-09-18",
+    "body": "Nonexistent customer support for paid customers — AI suggested a feature that doesn't exist; support told me to ask the community.",
+    "normalized_body": "nonexistent customer support for paid customers — ai suggested a feature that doesn't exist; support told me to ask the community.",
+    "body_sha": "e050b54345d650cc99c5b0b00972837f0830a42ed43856ee15f5e063a2c80b18",
+    "source_url": "https://www.trustpilot.com/reviews/68cc214296c6aa882b1c0fce",
+    "meta": { "author": null, "outscraper_id": null },
+    "source_id": null
+  },
+  {
+    "product_id": "notion.so",
+    "rating": 5,
+    "review_date": "2025-09-16",
+    "body": "j'adore cette app — c'est la meilleure !",
+    "normalized_body": "j'adore cette app — c'est la meilleure !",
+    "body_sha": "7af4ff2fe90221d9221988a6ecd91674a46dbf56058d337df461db9ae57298f3",
+    "source_url": "https://www.trustpilot.com/reviews/68c95933ccf11f97d21bbdd1",
+    "meta": { "author": "B7", "outscraper_id": null },
+    "source_id": null
   }
 ]

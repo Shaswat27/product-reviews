@@ -1,0 +1,1 @@
+export const COMPUTE_VERSION = 1 as const; // bump when metric/trend formulas change
