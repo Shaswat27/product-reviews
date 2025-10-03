@@ -96,6 +96,15 @@ async function callHaiku(input: string, meta?: unknown, opts?: ExtractCallOpts) 
   const defaultExample = `{"aspects":[{"aspect":"pricing","sentiment":"negative","severity":"medium","evidence":"tiers are confusing"}]}`;
   const exampleJson = (opts?.exampleJson ?? process.env.EXTRACT_EXAMPLE_JSON ?? defaultExample);
 
+  const systemPrompt = getSystemPrompt(exampleJson);
+  const userText = userPrompt(input, meta);
+
+  // 👇 Debug logs
+  console.log("=== extract.ts Anthropic call ===");
+  console.log("SYSTEM PROMPT:\n", systemPrompt);
+  console.log("USER PROMPT:\n", userText);
+  console.log("================================");
+
   const res = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 800,

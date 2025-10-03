@@ -135,11 +135,16 @@ export async function labelClusterTheme(opts: {
     counts: { reviews_in_cluster: evidence_count },
   };
 
+  console.log("=== labelClusterTheme Anthropic call ===");
+  console.log("SYSTEM PROMPT:\n", promptTemplate);
+  console.log("USER PROMPT:\n", JSON.stringify(userPayload, null, 2));
+  console.log("========================================");
+
   const msg = await withTransportRetry(() => anthropic.messages.create({
     model: "claude-3-5-haiku-20241022",
     temperature: 0,
     top_p: 1,
-    max_tokens: 400,
+    max_tokens: 800,
     system: promptTemplate,
     messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify(userPayload) }] }],
     })

@@ -1,11 +1,12 @@
 /* eslint-disable no-console */
 import { NextResponse } from "next/server";
 
+import fs from "node:fs/promises";
+import path from "node:path";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import crypto from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { embedTextBatch } from "@/lib/embeddings";
@@ -13,6 +14,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { labelClusterTheme, type LabeledTheme } from "@/lib/themes";
 import { type Severity, type EvidenceReview, explainEvidence, buildThemeDraft } from "@/lib/evidence";
 import { synthesizeTheme } from "@/lib/synthesize";
+import { fetchNormalizedTrustpilot, extractDomainFromTarget } from "@/lib/trustpilot/normalize";
+import { extractFromReview, type Extracted as ExtractedFromLib } from "@/lib/extract";
 
 const PROMPT_VERSION = 1 as const; // bump to invalidate LLM caches (Day-17)
 
@@ -21,9 +24,9 @@ const EVIDENCE_K_DEFAULT = 5 as const;
 
 // ---------- Constants ----------
 const EMB_MODEL = "text-embedding-3-small" as const;
-const CLU_EPS = 0.12 as const;     // fixed per D16 plan (tune if needed)
-const CLU_MINPTS = 2 as const;     // fixed per D16 plan
-const INCLUDE_NOISE_AS_SINGLETONS = true as const;
+const CLU_EPS = Number(process.env.CLUSTER_EPS ?? 0.14);
+const CLU_MINPTS = Number(process.env.CLUSTER_MINPTS ?? 10);
+const INCLUDE_NOISE_AS_SINGLETONS = false as const;
 
 const PIPELINE_VERSION = "1.0.0" as const;
 
@@ -149,49 +152,44 @@ async function resolveQuarterRange(quarter: string): Promise<{ start: Date; end:
   return { start, end };
 }
 
-// ---------- Mock review loader (swap with TP proxy later) ----------
 async function fetchReviewsForQuarter(
-  productId: string,
+  productIdOrDomain: string,
   start: Date,
   end: Date,
   limit: number,
 ): Promise<Review[]> {
-  const filePath = path.join(process.cwd(), "src", "data", "mock_reviews.json");
-  const raw = await readFile(filePath, "utf8");
-  const json = JSON.parse(raw) as Array<{
-    id?: string;
-    product_id: string;
-    body: string;
-    review_date?: string;
-  }>;
+  // derive quarter string from the provided start date (your runner already has it)
+  const quarter = `${start.getUTCFullYear()}Q${Math.floor(start.getUTCMonth() / 3) + 1}`;
+  const target = extractDomainFromTarget(productIdOrDomain);
 
-  const filtered = json.filter((r) => {
-    if (r.product_id !== productId) return false;
-    const d = new Date(r.review_date ?? 0);
-    return d >= start && d <= end;
-  });
+  const { items } = await fetchNormalizedTrustpilot(target, quarter, limit);
 
-  const sorted = filtered
-    .map((r) => {
-      const id = r.id ?? sha256Str(`${r.product_id}:${r.body}`);
-      const normalized_body = normalizeForSha(r.body);
+  const mapped: Review[] = items
+    .filter((it) => {
+      const d = new Date(`${it.review_date}T00:00:00Z`);
+      return d >= start && d <= end;
+    })
+    .map((it) => {
+      const id = sha256Str(`${target}:${it.body_sha}:${it.review_date}`);
       return {
         id,
-        product_id: r.product_id,
-        body: r.body,
-        review_date: r.review_date ?? new Date(0).toISOString(),
-        normalized_body,
-        body_sha: sha256Str(normalized_body),
-        source_url: undefined,
+        product_id: target,
+        body: it.body,
+        review_date: `${it.review_date}T00:00:00.000Z`,
+        normalized_body: it.normalized_body,
+        body_sha: it.body_sha,
+        source_url: it.source_url ?? undefined,
       } satisfies Review;
-    })
-    .sort((a, b) => {
-      if (a.product_id !== b.product_id) return a.product_id.localeCompare(b.product_id);
-      if (a.review_date !== b.review_date) return a.review_date.localeCompare(b.review_date);
-      return a.id.localeCompare(b.id);
     });
 
-  return sorted.slice(0, limit);
+  // keep your canonical sort for determinism
+  mapped.sort((a, b) => {
+    if (a.product_id !== b.product_id) return a.product_id.localeCompare(b.product_id);
+    if (a.review_date !== b.review_date) return a.review_date.localeCompare(b.review_date);
+    return a.id.localeCompare(b.id);
+  });
+
+  return mapped.slice(0, limit);
 }
 
 // ---------- Embedding cache ----------
@@ -389,6 +387,7 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
 type AspectName =
   | "pricing" | "onboarding" | "support" | "performance"
   | "integrations" | "reporting" | "usability" | "reliability" | "feature_gap";
+
 type Extracted = {
   aspects: Array<{
     aspect: AspectName;
@@ -399,50 +398,66 @@ type Extracted = {
   persona?: { company_size?: "1-10" | "11-50" | "51-200" | "200+"; industry?: string };
 };
 
-const DEFAULT_THEME_PROMPT =
-  "You are a concise product ops assistant. Given sample quotes and top aspects, return a short theme name, a 1–2 sentence summary, and severity. Output strict JSON.";
-
 async function llmNameAndSummarizeUsingThemes(
   _centroid6: readonly number[],
   evidence: ReadonlyArray<EvidenceReview>,
   {
     productId,
     clusterId,
-    promptTemplate = DEFAULT_THEME_PROMPT,
+    promptTemplate,
     anthropicApiKey = process.env.ANTHROPIC_API_KEY,
   }: { productId: string; clusterId: string; promptTemplate?: string; anthropicApiKey?: string },
 ): Promise<{ name: string; summary: string; severity: Severity }> {
   if (!anthropicApiKey) {
-    // Deterministic fallback when key missing
-    return { name: "Theme (stub)", summary: "Summary (stub)", severity: "medium" };
+    throw new Error("ANTHROPIC_API_KEY is required for theme labeling");
   }
+
   const anthropic = new Anthropic({ apiKey: anthropicApiKey });
 
-  // Minimal deterministic stand-in for Stage-1 extracts using evidence quotes.
-  const extractedByReviewId = new Map<string, Extracted>();
-  for (const r of evidence) {
-    const quote = (r.body ?? "").trim().slice(0, 180);
-    const sev =
-      (r as EvidenceReview & { severity?: Severity }).severity ?? "medium";
-    extractedByReviewId.set(r.id, {
-      aspects: [{
-        aspect: "usability",
-        sentiment: "neutral",
-        severity: sev,
-        evidence: quote,
-      }],
-    });
-  }
+  // Load canonical theme-labeling prompt when not provided
+  const effectivePrompt =
+    promptTemplate ??
+    (await fs.readFile(
+      path.join(process.cwd(), "src", "prompts", "theme-labeling.md"),
+      "utf8",
+    ));
+
+  // Build the extractedByReviewId map using your real extractor
+  // Runs in parallel, then assembles the Map once all are done.
+  const extractedPairs = await Promise.all(
+    evidence.map(async (r) => {
+      const body = String(r.body ?? "");
+      // Pass any meta you want; extractor supports it (optional)
+      const extracted: ExtractedFromLib = await extractFromReview({ body, meta: { review_id: r.id } });
+      // Trim evidence for prompt hygiene (labeler will cap again)
+      const trimmed: Extracted = {
+        aspects: extracted.aspects.map(a => ({
+          aspect: a.aspect as AspectName,
+          sentiment: a.sentiment,
+          severity: a.severity,
+          evidence: String(a.evidence ?? "").trim().slice(0, 180),
+        })),
+        persona: extracted.persona,
+      };
+      return [r.id, trimmed] as const;
+    })
+  );
+
+  const extractedByReviewId = new Map<string, Extracted>(
+    extractedPairs.filter(([, ex]) => ex.aspects.length > 0)
+  );
+
   const labeled: LabeledTheme = await labelClusterTheme({
     anthropic,
-    promptTemplate,
+    promptTemplate: effectivePrompt,
     productId,
     clusterId,
-    reviewIds: evidence.map(e => e.id),
+    reviewIds: evidence.map((e) => e.id),
     extractedByReviewId,
     maxQuotes: 6,
   });
-  return { name: labeled.name, summary: labeled.summary, severity: labeled.severity };
+
+  return { name: labeled.name, summary: labeled.summary, severity: labeled.severity as Severity };
 }
 
 // ---------- Pipeline ----------
@@ -450,9 +465,34 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
   const { businessUnitId, quarter, limit } = input;
 
   const { start, end } = await resolveQuarterRange(quarter);
-  const manifestId = crypto.randomUUID();
+  // Look up by natural key first
+const { data: existing, error: selErr } = await db
+  .from("manifests")
+  .select("id")
+  .eq("business_unit_id", businessUnitId)
+  .eq("quarter", quarter)
+  .eq("pipeline_version", PIPELINE_VERSION)
+  .maybeSingle();
+if (selErr) throw selErr;
 
-  const { error: manErr } = await db
+let manifestId: string;
+
+if (existing?.id) {
+  // Reuse the existing PK; update non-PK fields only
+  manifestId = existing.id;
+  const { error: updErr } = await db
+    .from("manifests")
+    .update({
+      start_date: start.toISOString(),
+      end_date: end.toISOString(),
+      // any other mutable columns EXCEPT id
+    })
+    .eq("id", manifestId);
+  if (updErr) throw updErr;
+} else {
+  // Create a fresh row with a new id
+  manifestId = crypto.randomUUID();
+  const { error: insErr } = await db
     .from("manifests")
     .insert({
       id: manifestId,
@@ -462,7 +502,8 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
       end_date: end.toISOString(),
       pipeline_version: PIPELINE_VERSION,
     });
-  if (manErr) throw manErr;
+  if (insErr) throw insErr;
+}
 
   const reviews = await fetchReviewsForQuarter(businessUnitId, start, end, limit);
   console.log("reviews fetched:", reviews.length, "range", start.toISOString(), end.toISOString(), "unit", businessUnitId);
@@ -524,20 +565,20 @@ async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts
     // Persist theme and obtain UUID
     const topic_key = c.id.replace(/^cl_/, "");
     const { data: themeRow, error: themeErr } = await db
-      .from("themes")
-      .upsert({
-        product_id: businessUnitId,
-        manifest_id: manifestId,
-        cluster_id: c.id,
-        topic_key,
-        prompt_version: PROMPT_VERSION,
-        evidence_count: draft.evidence_ids.length,
-        name: draft.name,
-        summary: draft.summary,
-        severity: draft.severity,
-      }, { onConflict: "cluster_id" })
-      .select("id, cluster_id")
-      .single();
+    .from("themes")
+    .upsert({
+      product_id: businessUnitId,
+      manifest_id: manifestId,
+      cluster_id: c.id,
+      topic_key,
+      prompt_version: PROMPT_VERSION,
+      evidence_count: draft.evidence_ids.length,
+      name: draft.name,
+      summary: draft.summary,
+      severity: draft.severity,
+    }, { onConflict: "manifest_id,cluster_id" })  // <- critical change
+    .select("id, cluster_id")
+    .single();
     if (themeErr) throw themeErr;
 
     const typedThemeRow = themeRow as ThemeRowShort;
