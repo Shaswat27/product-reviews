@@ -655,7 +655,7 @@ export async function POST(req: Request) {
   const resolved: Required<IngestBody> = {
     businessUnitId: body.businessUnitId.trim(),
     quarter: body.quarter,
-    limit: body.limit ?? 12,
+    limit: body.limit ?? 50,
   };
 
   console.log("POST /api/ingest/run ->", { ...resolved, debug });
