@@ -2,20 +2,21 @@ export const dynamic = 'force-dynamic'
 export const revalidate = 0
 export const fetchCache = 'force-no-store'
 
-import { TrendingUp, TrendingDown, AlertTriangle, Clock, Target, Rocket } from "lucide-react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-// Removed ProductPicker + per-theme GenerateActionsButton
-import ProductSearch from "@/components/ProductSearch"
-import InsightsButton from "@/components/InsightsButton"
+import { AlertTriangle, Clock } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 
 // Supabase
 import { supabaseServerRead } from "@/lib/supabaseServerRead"
 
-// Chart
-import ThemeTrends from "@/components/ThemeTrends"
+// Figma UI atoms
+import { MetricCard } from "@/components/metric-card"
+import { CompactMetricCard } from "@/components/compact-metric-card"
+import { CustomerThemeCard } from "@/components/customer-theme-card"
+import { TopActionsCard } from "@/components/top-actions-card"
+import { cn } from "@/lib/utils"
+
+// Figma header bridge
+import DashboardHeader from "@/components/DashboardHeader"
 
 type Severity = "high" | "medium" | "low"
 type Product = { id: string; name: string; slug?: string }
@@ -24,11 +25,10 @@ type Action = {
   theme_id: string
   kind: "product" | "gtm"
   description: string
-  impact: number // 1-5 in DB
-  effort: number // 1-5 in DB
+  impact: number
+  effort: number
   evidence?: Array<{ type: string; id: string; note?: string }>
 }
-
 type Theme = {
   id: string
   product_id: string
@@ -38,9 +38,7 @@ type Theme = {
   evidence_count: number
   summary: string
 }
-
 type TrendPoint = { week: string; themes: number }
-// ---- Supabase row helpers ----
 type TrendRow = { week: string; themes: number }
 
 const severityConfig = {
@@ -62,11 +60,11 @@ export default async function Dashboard({
   const { data: themeProducts, error: themeProductsErr } = await supabase
     .from("themes")
     .select("product_id")
-    .order("product_id", { ascending: true })
   if (themeProductsErr) throw themeProductsErr
+
   const productIds = Array.from(new Set((themeProducts ?? []).map(t => t.product_id))).filter(Boolean) as string[]
   const productList: Product[] = productIds.map(id => ({ id, name: id.charAt(0).toUpperCase() + id.slice(1) }))
-  const selectedId = q ?? productIds[0]  // honor the URL value even if not in DB
+  const selectedId = q ?? productIds[0] // honor URL value even if not in DB
 
   // Filter by product
   const { data: themes, error: themesErr } = await supabase
@@ -76,28 +74,25 @@ export default async function Dashboard({
     .limit(5)
   if (themesErr) throw themesErr
   const themesArrRaw = (themes ?? []) as Theme[]
-  // Exclude cache sentinel rows
   const themesArr: Theme[] = themesArrRaw.filter(t => t.name !== "__cache__")
 
-  // Actions for those themes
+  // Actions
   const themeIds = themesArr.map((t: Theme) => t.id)
-  
   let actionsArr: Action[] = []
- if (themeIds.length > 0) {
-   const { data: actionsRaw, error: actionsErr } = await supabase
-     .from("actions")
-     .select("id, theme_id, kind, description, impact, effort, evidence")
-     .in("theme_id", themeIds)
-   if (actionsErr) throw actionsErr
-   actionsArr = (actionsRaw ?? []).filter(a => a.description !== "__cache__") as Action[]
- }
-
+  if (themeIds.length > 0) {
+    const { data: actionsRaw, error: actionsErr } = await supabase
+      .from("actions")
+      .select("id, theme_id, kind, description, impact, effort, evidence")
+      .in("theme_id", themeIds)
+    if (actionsErr) throw actionsErr
+    actionsArr = (actionsRaw ?? []).filter(a => a.description !== "__cache__") as Action[]
+  }
   const actionsByTheme = actionsArr.reduce((acc, a) => {
     ;(acc[a.theme_id] ||= []).push(a)
     return acc
   }, {} as Record<string, Action[]>)
 
-  // Trends (keep existing weekly view if available)
+  // Trends
   let trends: TrendPoint[] = []
   const { data: trendRows, error: trendsErr } = await supabase
     .from("theme_trends")
@@ -112,7 +107,6 @@ export default async function Dashboard({
   const evidencePoints = themesArr.reduce((sum: number, t: Theme) => sum + (t.evidence_count || 0), 0)
   const actionItems = actionsArr.length
 
-  // Consolidated Top Actions (compact summary)
   const themeNameById = new Map<string, string>(themesArr.map((t: Theme) => [t.id, t.name]))
   const topActions = actionsArr
     .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
@@ -120,201 +114,92 @@ export default async function Dashboard({
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
 
+  const highSeverityCount = themesArr.filter((t: Theme) => t.severity === "high").length
+  const confidencePct = Math.min(95, 70 + themesArr.length * 5)
+
+  const figmaTopActions = topActions.map(a => ({
+    title: a.description,
+    description: `${a.kind.toUpperCase()} • ${a.themeName} • Impact ${a.impact}/5 • Effort ${a.effort}/5`,
+  }))
+
+  const hasActions = Array.isArray(figmaTopActions) && figmaTopActions.length > 0;
+  console.log('hasActions', hasActions);
   return (
-    <div className="container mx-auto max-w-7xl space-y-6">
-      {/* ===== Header with Product Search + Global Insights Button ===== */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold heading-accent">
-            <span className="text-[hsl(var(--primary))]">SignalLens</span>
-            <span className="text-[hsl(var(--foreground))]"> Dashboard</span>
-          </h1>
-          <p className="body-ink -mt-1">Latest insights for the selected product</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ProductSearch initialProductId={selectedId} fallbackOptions={productList} />
-          <InsightsButton productId={selectedId} />
+    // Do NOT re-wrap with container/max-w; root layout already handles width
+    <div className="space-y-6 min-w-0 w-full">
+      <DashboardHeader selectedId={selectedId} productList={productList} />
+
+      {/* Metrics Grid */}
+      <div className="lg:hidden">
+        <div className="grid grid-cols-2 gap-2">
+          <CompactMetricCard title="High Severity Issues" value={highSeverityCount} type="warning" />
+          <CompactMetricCard title="Evidence Points" value={evidencePoints} type="info" />
+          <CompactMetricCard title="Action Items" value={actionItems} type="success" />
+          <CompactMetricCard title="Confidence Score" value={`${confidencePct}%`} type="primary" />
         </div>
       </div>
 
-      {/* ===== Stats Overview ===== */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle className="h-5 w-5 text-severity-high" />
-              <div>
-                <p className="text-2xl font-bold">{themesArr.filter((t: Theme) => t.severity === "high").length}</p>
-                <p className="text-sm text-muted-foreground">High Severity Issues</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5" />
-              <div>
-                <p className="text-2xl font-bold">{evidencePoints}</p>
-                <p className="text-sm text-muted-foreground">Evidence Points</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-2">
-              <Target className="h-5 w-5" />
-              <div>
-                <p className="text-2xl font-bold">{actionItems}</p>
-                <p className="text-sm text-muted-foreground">Action Items</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="card-3d stat-card">
-          <CardContent className="p-6">
-            <div className="flex items-center space-x-2">
-              <Rocket className="h-5 w-5" />
-              <div>
-                <p className="text-2xl font-bold">{Math.min(95, 70 + themesArr.length * 5)}%</p>
-                <p className="text-sm text-muted-foreground">Confidence Score</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="hidden lg:grid grid-cols-4 gap-6">
+        <MetricCard title="High Severity Issues" value={highSeverityCount} type="warning" />
+        <MetricCard title="Evidence Points" value={evidencePoints} type="info" />
+        <MetricCard title="Action Items" value={actionItems} type="success" />
+        <MetricCard title="Confidence Score" value={`${confidencePct}%`} type="primary" />
       </div>
 
-      {/* ===== Main Content ===== */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Theme Cards */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-foreground">Top Customer Themes</h2>
-            {/* Removed View All Themes button per new flow */}
-          </div>
+      {/* Content */}
+      <div className="grid gap-8 xl:grid-cols-3 w-full min-w-0">
+        {/* THEMES */}
+        {/* This div is now always present, but its column span changes */}
+        <div
+          className={cn(
+            "space-y-4 lg:space-y-6 w-full min-w-0",
+            hasActions ? "xl:col-span-2" : "xl:col-span-3" // Spans full width if no actions
+          )}
+        >
+          <h2 className="text-lg lg:text-xl font-semibold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
+            Top Customer Themes
+          </h2>
 
-          <div className="space-y-4">
-            {themesArr.map((theme: Theme) => (
-              <ThemeCard key={theme.id} theme={theme} actions={actionsByTheme[theme.id] ?? []} />
-            ))}
-          </div>
+          {themesArr.length > 0 ? (
+            themesArr.map((theme: Theme) => {
+              const actions = actionsByTheme[theme.id] ?? []
+              const avgImpact = actions.length ? actions.reduce((s, a) => s + (a.impact || 0), 0) / actions.length : 0
+              const avgEffort = actions.length ? actions.reduce((s, a) => s + (a.effort || 0), 0) / actions.length : 0
+
+              return (
+                <CustomerThemeCard
+                  key={theme.id}
+                  title={theme.name}
+                  description={theme.summary}
+                  severity={severityConfig[theme.severity].label}
+                  trend={`${theme.trend >= 0 ? "+" : "-"}${Math.abs(theme.trend)}%`}
+                  recommendations={(actions ?? []).map(a => a.description)}
+                  impact={`${avgImpact.toFixed(1)}/5`}
+                  effort={`${avgEffort.toFixed(1)}/5`}
+                />
+              )
+            })
+          ) : (
+            <Card className="w-full">
+              <CardContent className="p-6">
+                <p className="text-sm text-muted-foreground">No themes available for this product yet.</p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        {/* Trends + Top Actions */}
-        <div className="space-y-4">
-          <Card className="card-3d stat-card">
-            <CardHeader>
-              <CardTitle className="text-base">Top Actions (This Quarter)</CardTitle>
-              <CardDescription className="body-ink">Prioritized across this product’s themes</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {topActions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No actions yet.</p>
-              ) : (
-                topActions.map(a => (
-                  <div key={a.id} className="flex items-start gap-2 p-2 rounded bg-secondary">
-                    <div className={cn("p-1 rounded", a.kind === "product" ? "bg-primary/10" : "bg-accent/10")}>
-                      {a.kind === "product" ? (
-                        <Target className="h-3 w-3 text-primary" />
-                      ) : (
-                        <Rocket className="h-3 w-3 text-accent" />
-                      )}
-                    </div>
-                    <div className="text-sm">
-                      <div className="font-medium">{a.description}</div>
-                      <div className="text-xs text-muted-foreground">{a.kind.toUpperCase()} • {a.themeName} • Impact {a.impact}/5 · Effort {a.effort}/5</div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <h2 className="text-xl font-semibold text-foreground">Theme Trends</h2>
-          <ThemeTrends data={trends} />
-        </div>
+        {/* ACTIONS */}
+        {/* This div is now conditionally rendered */}
+        {hasActions && (
+          <div className="xl:col-span-1 space-y-4 lg:space-y-6 w-full min-w-0">
+            <TopActionsCard
+              title="Top Actions (This Quarter)"
+              subtitle="Prioritized across this product's themes"
+              actions={figmaTopActions}
+            />
+          </div>
+        )}
       </div>
     </div>
-  )
-}
-
-/* ===== Theme Card ===== */
-interface ThemeCardProps {
-  theme: Theme
-  actions: Action[]
-}
-
-function ThemeCard({ theme, actions }: ThemeCardProps) {
-  const severity = severityConfig[theme.severity]
-  const SeverityIcon = severity.icon
-  const isPositiveTrend = theme.trend >= 0
-
-  return (
-    <Card className="card-3d">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center space-x-2">
-            <Badge
-              className={cn(
-                "border-0",
-                theme.severity === "high" && "badge-high",
-                theme.severity === "medium" && "badge-medium",
-                theme.severity === "low" && "badge-low"
-              )}
-            >
-              <SeverityIcon className="h-3 w-3 mr-1" />
-              {severity.label}
-            </Badge>
-            {/* Removed evidence count badge per new flow */}
-          </div>
-
-          <div className="flex items-center space-x-1 text-sm">
-            {isPositiveTrend ? <TrendingUp className="h-4 w-4 text-success" /> : <TrendingDown className="h-4 w-4 text-severity-high" />}
-            <span className={cn("font-medium", isPositiveTrend ? "text-success" : "text-severity-high")}>{Math.abs(theme.trend)}%</span>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">{theme.name}</CardTitle>
-            {/* Removed per-theme GenerateActionsButton */}
-          </div>
-          <CardDescription className="mt-1">{theme.summary}</CardDescription>
-        </div>
-      </CardHeader>
-
-      <CardContent>
-        <div className="h-[3px] w-full rounded-full bg-[hsl(var(--accent))] mb-3" />
-
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium text-foreground">Recommended Actions</h4>
-          <div className="space-y-2">
-            {actions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No recommended actions yet for this theme.</p>
-            ) : (
-              actions.map((action: Action) => (
-                <div key={action.id} className="flex items-start gap-2 p-3 bg-secondary rounded-lg">
-                  <div className={cn("p-1 rounded", action.kind === "product" ? "bg-primary/10" : "bg-accent/10")}>
-                    {action.kind === "product" ? <Target className="h-3 w-3 text-primary" /> : <Rocket className="h-3 w-3 text-accent" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground">{action.description}</p>
-                    <div className="mt-1 flex items-center gap-3">
-                      <Badge variant="outline" className="text-[0.72rem]">{action.kind.toUpperCase()}</Badge>
-                      <span className="text-xs text-muted-foreground">Impact: {action.impact}/5 • Effort: {action.effort}/5</span>
-                      {/* Removed evidence snippet line */}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   )
 }

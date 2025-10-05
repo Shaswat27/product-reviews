@@ -1,9 +1,14 @@
 // app/layout.tsx
 import "./globals.css";
 import { Suspense } from "react";
-import SidebarItems from "./SidebarItems";
 import { SelectedProductProvider } from "./providers/SelectedProductProvider";
-import ClientToaster from "@/components/ClientToaster"; // ✅ add this
+import ClientToaster from "@/components/ClientToaster";
+
+// ✅ bring in your existing Sidebar context provider
+import { SidebarProvider } from "@/components/Sidebar";
+
+// ✅ use the adapter that renders the Figma sidebar + wires router/state
+import AppSidebar from "@/components/AppSidebar";
 
 export const metadata = {
   title: "SignalLens",
@@ -20,32 +25,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <Suspense fallback={<div className="p-4 text-sm opacity-60">Loading…</div>}>
           <SelectedProductProvider>
-            <div className="flex min-h-screen">
-              {/* Sidebar */}
-              <aside className="w-64 shrink-0 border-r bg-card">
-                <div className="px-4 py-4">
-                  <div className="text-xl font-bold heading-accent tracking-tight">SignalLens</div>
-                  <div className="brand-underline mt-1" />
-                  <div className="text-xs body-ink -mt-0.1">Product Insights</div>
-                </div>
+            {/* ✅ SidebarProvider supplies open/collapsed/cookies + mobile sheet state */}
+            <SidebarProvider defaultOpen>
+              {/* 16rem sidebar + fluid content on desktop; overlay on mobile */}
+            <div className="min-h-screen flex-1 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+              {/* Sidebar column */}
+              <AppSidebar />
 
-                <Suspense fallback={<div className="px-4 py-2 text-sm opacity-60">Loading…</div>}>
-                  <SidebarItems />
-                </Suspense>
-              </aside>
-
-              {/* Main */}
-              <main className="flex-1 bg-background text-foreground">
-                <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+              {/* Content column */}
+              <main className="bg-background text-foreground min-w-0">
+                {/* no max-width cap so it won’t look narrow; adjust padding as you like */}
+                <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">      
                   <Suspense fallback={<div className="text-sm opacity-60">Loading…</div>}>
-                    {children}
-                  </Suspense>
-                </div>
-              </main>
-            </div>
+                      {children}
+                    </Suspense>
+                  </div>
+                </main>
+              </div>
 
-            {/* 🔔 Global toast portal */}
-            <ClientToaster />
+              {/* 🔔 Global toast portal */}
+              <ClientToaster />
+            </SidebarProvider>
           </SelectedProductProvider>
         </Suspense>
       </body>

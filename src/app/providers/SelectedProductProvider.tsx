@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  startTransition,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -24,24 +25,24 @@ export function SelectedProductProvider({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // Initialize from URL (?product=) or localStorage
-  const [productId, setProductIdState] = useState<ProductId>(null);
+  // Initialize BEFORE first paint to avoid flicker
+  const [productId, setProductIdState] = useState<ProductId>(() => {
+    if (typeof window === "undefined") return null;
+    const fromUrl = new URLSearchParams(window.location.search).get("product");
+    if (fromUrl) return fromUrl;
+    const fromStorage = window.localStorage.getItem("selectedProductId");
+    return fromStorage ?? null;
+  });
 
-  // Hydrate from URL first, else localStorage; re-run if URL changes (e.g., back/forward)
+  // Keep state in sync when the URL changes (e.g., back/forward)
   useEffect(() => {
     const fromUrl = searchParams.get("product");
-    if (fromUrl) {
+    if (fromUrl !== productId) {
       setProductIdState(fromUrl);
-      return;
     }
-    const fromStorage =
-      typeof window !== "undefined"
-        ? window.localStorage.getItem("selectedProductId")
-        : null;
-    if (fromStorage) setProductIdState(fromStorage);
-  }, [searchParams]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]); // URL is the source of truth on navigation
 
-  // Stable setter that also syncs to localStorage and URL
   const setProductId = useCallback(
     (id: ProductId) => {
       setProductIdState(id);
@@ -51,12 +52,18 @@ export function SelectedProductProvider({ children }: { children: React.ReactNod
         else window.localStorage.removeItem("selectedProductId");
       }
 
-      // keep other params, just replace product
+      // preserve other params, just update/remove product
       const params = new URLSearchParams(searchParams.toString());
       if (id) params.set("product", id);
       else params.delete("product");
 
-      router.replace(`${pathname}?${params.toString()}`);
+      const query = params.toString();
+      const url = query ? `${pathname}?${query}` : pathname;
+
+      // avoid blocking render and avoid scroll jump
+      startTransition(() => {
+        router.replace(url, { scroll: false });
+      });
     },
     [router, pathname, searchParams]
   );

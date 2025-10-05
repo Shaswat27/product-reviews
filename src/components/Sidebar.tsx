@@ -67,26 +67,46 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
 
-    const [_open, _setOpen] = React.useState(defaultOpen)
+    // Read cookie immediately in the state initializer to avoid visual flicker.
+    const readCookieBoolean = React.useCallback((): boolean | undefined => {
+      if (typeof document === "undefined") return undefined
+      const m = document.cookie.match(
+        new RegExp(`(?:^|; )${SIDEBAR_COOKIE_NAME.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&")}=([^;]*)`)
+      )
+      if (!m) return undefined
+      try {
+        return decodeURIComponent(m[1]) === "true"
+      } catch {
+        return m[1] === "true"
+      }
+    }, [])
+
+    const [_open, _setOpen] = React.useState<boolean>(() => {
+      const fromCookie = readCookieBoolean()
+      return typeof fromCookie === "boolean" ? fromCookie : defaultOpen
+    })
+
     const open = openProp ?? _open
+
     const setOpen = React.useCallback(
       (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value
+        const next = typeof value === "function" ? (value as (v: boolean) => boolean)(open) : value
         if (setOpenProp) {
-          setOpenProp(openState)
+          setOpenProp(next)
         } else {
-          _setOpen(openState)
+          _setOpen(next)
         }
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+        // Persist to cookie for next page load (prevents flicker)
+        document.cookie = `${SIDEBAR_COOKIE_NAME}=${next}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
       },
       [setOpenProp, open]
     )
 
     const toggleSidebar = React.useCallback(() => {
-      return isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open)
+      return isMobile ? setOpenMobile((v) => !v) : setOpen((v) => !v)
     }, [isMobile, setOpen, setOpenMobile])
 
-    const state = open ? "expanded" : "collapsed"
+    const state: SidebarContext["state"] = open ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
@@ -196,27 +216,42 @@ const Sidebar = React.forwardRef<
         {/* spacer for fixed sidebar */}
         <div
           className={cn(
-            "duration-200 relative h-svh w-[--sidebar-width] bg-transparent transition-[width] ease-linear",
+            "duration-200 relative h-svh bg-transparent transition-[width] ease-linear",
+            // Expanded
+            "w-[--sidebar-width]",
+            // Adjust floating/inset padding to match fixed container
+            variant === "floating" || variant === "inset"
+              ? "w-[calc(var(--sidebar-width)_+_theme(spacing.4))]"
+              : "",
+            // Collapsed / icon modes
             "group-data-[collapsible=offcanvas]:w-0",
-            "group-data-[side=right]:rotate-180",
             variant === "floating" || variant === "inset"
               ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]"
-          )}
-        />
-        <div
-          className={cn(
-            "duration-200 fixed inset-y-0 z-10 hidden h-svh w-[--sidebar-width] transition-[left,right,width] ease-linear md:flex",
-            side === "left"
-              ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
-              : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
-            variant === "floating" || variant === "inset"
-              ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
-              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
             className
           )}
-          {...props}
-        >
+        />
+
+        <div
+            className={cn(
+              "duration-200 fixed inset-y-0 z-10 hidden h-svh transition-[width,left,right] ease-linear md:flex",
+              side === "left"
+                ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
+                : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
+              // Expanded
+              "w-[--sidebar-width]",
+              variant === "floating" || variant === "inset"
+                ? "w-[calc(var(--sidebar-width)_+_theme(spacing.4))] p-2"
+                : "group-data-[side=left]:border-r group-data-[side=right]:border-l",
+              // Collapsed / icon
+              variant === "floating" || variant === "inset"
+                ? "group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4))]"
+                : "group-data-[collapsible=icon]:w-[--sidebar-width-icon]",
+              className
+            )}
+            {...props}
+          >
+
           <div
             data-sidebar="sidebar"
             className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
@@ -410,9 +445,9 @@ const SidebarGroupLabel = React.forwardRef<
       ref={ref}
       data-sidebar="group-label"
       className={cn(
-        "duration-200 flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
-        className
+      "duration-200 flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opacity] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
+      "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
+      className
       )}
       {...props}
     />
