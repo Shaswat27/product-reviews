@@ -127,7 +127,7 @@ export default async function Dashboard({
   return (
     // Do NOT re-wrap with container/max-w; root layout already handles width
     <div className="space-y-6 min-w-0 w-full">
-      <DashboardHeader selectedId={selectedId} productList={productList} />
+      <DashboardHeader productList={productList} />
 
       {/* Metrics Grid */}
       <div className="lg:hidden">
