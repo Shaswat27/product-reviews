@@ -60,6 +60,7 @@ export async function trustpilotSearchREST(query: string, limit = 5) {
   const resp = await outscraperGet("/trustpilot/search", {
     query: [query],
     limit,
+    categories: "electronics_technology-internet_software",
     // keep async=false for smoke runs
     async: false,
   });
