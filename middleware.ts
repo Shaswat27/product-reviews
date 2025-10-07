@@ -1,6 +1,20 @@
 // middleware.ts
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+
+// This middleware now does nothing and allows all requests to pass through.
+// You can delete this file if you don't need it for anything else.
+export function middleware(request: NextRequest) {
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [], // No paths matched
+}
+
+/* Earlier version of middleware.ts with authentication logic:
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 
 export async function middleware(req: NextRequest) {
@@ -81,3 +95,4 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }
+*/

@@ -94,13 +94,6 @@ export function DashboardSidebar({ isOpen, onClose, currentPage, onNavigate }: D
             </Button>
           </nav>
         </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-border/50">
-          <Button variant="ghost" className="w-full text-muted-foreground text-sm hover:text-foreground">
-            Sign out
-          </Button>
-        </div>
       </div>
     </>
   )
