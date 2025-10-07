@@ -63,7 +63,7 @@ export default function ProductSearch({
     const t = setTimeout(async () => {
       try {
         const res = await fetch(
-          `/api/trustpilot/search?query=${encodeURIComponent(q)}&limit=6`,
+          `/api/trustpilot/search?query=${encodeURIComponent(q)}&limit=10`,
           { signal } // ✅ 2. Pass the signal to fetch
         );
         if (!res.ok) throw new Error("search failed");
