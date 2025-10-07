@@ -112,10 +112,11 @@ export default async function Dashboard({
     .map(a => ({ ...a, themeName: themeNameById.get(a.theme_id) ?? "Unknown" }))
     .map(a => ({ ...a, score: a.impact * 2 - a.effort }))
     .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
+    .slice(0, 3) // Changed from 5 to 3
 
   const highSeverityCount = themesArr.filter((t: Theme) => t.severity === "high").length
-  const confidencePct = Math.min(95, 70 + themesArr.length * 5)
+  const rawConfidence = Math.min(95, 39 * Math.log(evidencePoints + 1))
+  const confidencePct = rawConfidence.toFixed(0)
 
   const figmaTopActions = topActions.map(a => ({
     title: a.description,
@@ -123,7 +124,7 @@ export default async function Dashboard({
   }))
 
   const hasActions = Array.isArray(figmaTopActions) && figmaTopActions.length > 0;
-  console.log('hasActions', hasActions);
+  
   return (
     // Do NOT re-wrap with container/max-w; root layout already handles width
     <div className="space-y-6 min-w-0 w-full">
@@ -163,8 +164,6 @@ export default async function Dashboard({
           {themesArr.length > 0 ? (
             themesArr.map((theme: Theme) => {
               const actions = actionsByTheme[theme.id] ?? []
-              const avgImpact = actions.length ? actions.reduce((s, a) => s + (a.impact || 0), 0) / actions.length : 0
-              const avgEffort = actions.length ? actions.reduce((s, a) => s + (a.effort || 0), 0) / actions.length : 0
 
               return (
                 <CustomerThemeCard
@@ -172,10 +171,8 @@ export default async function Dashboard({
                   title={theme.name}
                   description={theme.summary}
                   severity={severityConfig[theme.severity].label}
-                  trend={`${theme.trend >= 0 ? "+" : "-"}${Math.abs(theme.trend)}%`}
-                  recommendations={(actions ?? []).map(a => a.description)}
-                  impact={`${avgImpact.toFixed(1)}/5`}
-                  effort={`${avgEffort.toFixed(1)}/5`}
+                  evidenceCount={theme.evidence_count || 0}
+                  recommendations={actions}
                 />
               )
             })
@@ -193,8 +190,7 @@ export default async function Dashboard({
         {hasActions && (
           <div className="xl:col-span-1 space-y-4 lg:space-y-6 w-full min-w-0">
             <TopActionsCard
-              title="Top Actions (This Quarter)"
-              subtitle="Prioritized across this product's themes"
+              title="Top 3 Product & GTM Actions"
               actions={figmaTopActions}
             />
           </div>

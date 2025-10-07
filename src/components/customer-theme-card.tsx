@@ -2,27 +2,28 @@
 import { Card, CardContent, CardHeader } from "./ui/card"
 import { Badge } from "./ui/badge"
 import { Button } from "./ui/button"
-import { ChevronDown, TrendingUp } from "lucide-react"
+import { ChevronDown } from "lucide-react"
 import { useState } from "react"
 
 interface CustomerThemeCardProps {
   title: string
   description: string
   severity: "High" | "Medium" | "Low"
-  trend: string
-  recommendations: string[]
-  impact: string
-  effort: string
+  evidenceCount: number
+  recommendations: Array<{
+    description: string;
+    kind: "product" | "gtm";
+    impact: number;
+    effort: number;
+  }>
 }
 
 export function CustomerThemeCard({ 
   title, 
   description, 
   severity, 
-  trend, 
-  recommendations,
-  impact,
-  effort 
+  evidenceCount,
+  recommendations
 }: CustomerThemeCardProps) {
   const [isExpanded, setIsExpanded] = useState(true)
 
@@ -45,9 +46,8 @@ export function CustomerThemeCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <Badge className={`${getSeverityColor()} shadow-sm`}>{severity}</Badge>
-            <div className="flex items-center gap-2 text-sm text-emerald-600">
-              <TrendingUp className="w-4 h-4" />
-              {trend}
+            <div className="text-sm text-emerald-600 font-medium">
+              {evidenceCount} Evidence Point{evidenceCount !== 1 ? 's' : ''}
             </div>
           </div>
           <Button
@@ -67,27 +67,26 @@ export function CustomerThemeCard({
       
       {isExpanded && (
         <CardContent className="pt-0">
-          <div className="space-y-6">
-            <div className="space-y-4">
-              <h4 className="font-medium text-primary">Recommended Actions</h4>
-              <ul className="space-y-3">
-                {recommendations.map((rec, index) => (
-                  <li key={index} className="flex items-start gap-3 text-sm p-3 rounded-lg bg-gradient-to-r from-primary/5 to-transparent border border-primary/10">
+          <div className="space-y-4">
+            <h4 className="font-medium text-primary">Recommended Actions</h4>
+            <ul className="space-y-3">
+              {recommendations.map((rec, index) => (
+                <li key={index} className="flex flex-col items-start gap-2 text-sm p-3 rounded-lg bg-gradient-to-r from-primary/5 to-transparent border border-primary/10">
+                  <div className="flex items-start gap-3 w-full">
                     <div className="w-2 h-2 bg-gradient-to-r from-primary to-primary/80 rounded-full mt-2 flex-shrink-0 shadow-sm" />
-                    <span className="text-muted-foreground leading-relaxed">{rec}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border/50">
-              <Badge variant="outline" className="text-xs bg-primary/5 border-primary/20 text-primary">
-                PRODUCT
-              </Badge>
-              <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
-                Impact: {impact} • Effort: {effort}
-              </div>
-            </div>
+                    <span className="text-muted-foreground leading-relaxed">{rec.description}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 pl-5 pt-1">
+                    <Badge variant="outline" className="text-xs bg-primary/5 border-primary/20 text-primary">
+                      {rec.kind.toUpperCase()}
+                    </Badge>
+                    <div className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-md">
+                      Impact: {rec.impact}/5 • Effort: {rec.effort}/5
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
         </CardContent>
       )}
