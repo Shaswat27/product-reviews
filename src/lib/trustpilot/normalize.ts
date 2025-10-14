@@ -1,7 +1,6 @@
 // src/lib/trustpilot/normalize.ts
 /* eslint-disable no-console */
 import crypto from "node:crypto";
-import { normalizeQuarter, quarterRange, isoDate } from "@/lib/quarters";
 import { trustpilotReviewsREST } from "@/lib/outscraper";
 
 export type RawReview = {
@@ -105,16 +104,13 @@ export function extractDomainFromTarget(target: string): string {
 }
 
 /**
- * Fetch + normalize Trustpilot reviews for a target + quarter.
+ * Fetch + normalize the most recent Trustpilot reviews for a target.
  * Returns the same "NormalizedReview[]" shape used by your /trustpilot/review route.
  */
 export async function fetchNormalizedTrustpilot(
   target: string,
-  quarter: string,
   limit: number,
 ): Promise<{ items: NormalizedReview[]; count: number }> {
-  const qNorm = normalizeQuarter(quarter);
-  const { start, end } = quarterRange(qNorm);
   const product_id = extractDomainFromTarget(target);
 
   const { reviews: raw } = await trustpilotReviewsREST(
@@ -129,17 +125,15 @@ export async function fetchNormalizedTrustpilot(
 
   const normalized = input
     .filter((r) => {
-      const iso = toISODateAny(r);
-      if (!iso) return false;
-      const d = new Date(`${iso}T00:00:00Z`);
-      return d >= start && d <= end;
+      // Ensure the review has a parseable date before continuing
+      return !!toISODateAny(r);
     })
     .map((r) => {
       const bodyRaw = pickBody(r);
       const body = bodyRaw ?? "";
       const normalized_body = normalizeBody(body);
       const body_sha = sha256(normalized_body);
-      const review_date = toISODateAny(r) ?? isoDate(start);
+      const review_date = toISODateAny(r)!; // Non-null assertion is safe due to the filter above
 
       return {
         product_id,

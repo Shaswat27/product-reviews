@@ -8,8 +8,8 @@ You will receive:
 - counts: { reviews_in_cluster }
 
 Goal:
-1) Produce a concise **theme name** (2–4 words, no brand names, no emojis).
-2) Produce a **short summary** (1–2 sentences) that captures what users are saying.
+1) Produce a concise **theme name** (4–6 words, no brand names, no emojis).
+2) Produce a **short summary** (2 sentences) that captures what users are saying describing expanding upon the theme and succintly summarizing the example quotes
 3) Estimate **severity**: "low" | "medium" | "high"
    - high: frequent, clearly negative impact, or critical breakage
    - medium: common friction but workarounds exist
@@ -23,7 +23,7 @@ Style:
 
 Return strictly valid JSON:
 {
-  "name": "string, 2-4 words",
-  "summary": "string, 1-2 sentences",
+  "name": "string, 4-6 words",
+  "summary": "string, 2 sentences",
   "severity": "low|medium|high"
 }

@@ -3,20 +3,11 @@ import {PROMPT_VERSION} from "@/lib/cache"
 import Anthropic from "@anthropic-ai/sdk";
 import {supabaseServerRead} from "@/lib/supabaseServerRead";
 import {withTransportRetry} from "@/lib/retry";
+import { type Extracted } from "@/lib/extract";
 
 type AspectName =
   | "pricing" | "onboarding" | "support" | "performance"
   | "integrations" | "reporting" | "usability" | "reliability" | "feature_gap";
-
-type Extracted = {
-  aspects: Array<{
-    aspect: AspectName;
-    sentiment: "positive" | "neutral" | "negative";
-    severity: "low" | "medium" | "high";
-    evidence: string;
-  }>;
-  persona?: { company_size?: "1-10" | "11-50" | "51-200" | "200+"; industry?: string };
-};
 
 export type LabeledTheme = {
   name: string;
@@ -143,8 +134,7 @@ export async function labelClusterTheme(opts: {
   const msg = await withTransportRetry(() => anthropic.messages.create({
     model: "claude-3-5-haiku-20241022",
     temperature: 0,
-    top_p: 1,
-    max_tokens: 800,
+    max_tokens: 1000,
     system: promptTemplate,
     messages: [{ role: "user", content: [{ type: "text", text: JSON.stringify(userPayload) }] }],
     })

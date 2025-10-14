@@ -12,10 +12,11 @@ import { createClient } from "@supabase/supabase-js";
 import { embedTextBatch } from "@/lib/embeddings";
 import Anthropic from "@anthropic-ai/sdk";
 import { labelClusterTheme, type LabeledTheme } from "@/lib/themes";
-import { type Severity, type EvidenceReview, explainEvidence, buildThemeDraft } from "@/lib/evidence";
+import { type Severity, type EvidenceReview, buildThemeDraft } from "@/lib/evidence";
 import { synthesizeTheme } from "@/lib/synthesize";
 import { fetchNormalizedTrustpilot, extractDomainFromTarget } from "@/lib/trustpilot/normalize";
 import { extractFromReview, type Extracted as ExtractedFromLib } from "@/lib/extract";
+import { HDBSCAN } from "hdbscan-ts";
 
 const PROMPT_VERSION = 1 as const; // bump to invalidate LLM caches (Day-17)
 
@@ -24,8 +25,8 @@ const EVIDENCE_K_DEFAULT = 5 as const;
 
 // ---------- Constants ----------
 const EMB_MODEL = "text-embedding-3-small" as const;
-const CLU_EPS = Number(process.env.CLUSTER_EPS ?? 0.14);
-const CLU_MINPTS = Number(process.env.CLUSTER_MINPTS ?? 10);
+const CLU_MIN_CLUSTER_SIZE = Number(process.env.CLUSTER_MIN_CLUSTER_SIZE ?? 4);
+const CLU_MIN_SAMPLES = Number(process.env.CLU_MIN_SAMPLES ?? 3);
 const INCLUDE_NOISE_AS_SINGLETONS = false as const;
 
 const PIPELINE_VERSION = "1.0.0" as const;
@@ -44,15 +45,6 @@ function roundTo(v: number, places = 6): number {
 function roundVector(vec: number[], places = 6): number[] {
   return vec.map((x) => roundTo(x, places));
 }
-function previewVec(vec: number[] | undefined, dims = 8): number[] | null {
-  if (!Array.isArray(vec) || vec.length === 0) return null;
-  return vec.slice(0, Math.min(dims, vec.length));
-}
-function vecHash6(vec: number[] | undefined): string | null {
-  if (!Array.isArray(vec)) return null;
-  const json = JSON.stringify(vec);
-  return crypto.createHash("sha256").update(json).digest("hex").slice(0, 12);
-}
 function normalizeForSha(s: string): string {
   return s.normalize("NFKC").replace(/\s+/g, " ").trim();
 }
@@ -60,7 +52,6 @@ function sha256Str(s: string): string {
   return crypto.createHash("sha256").update(s, "utf8").digest("hex");
 }
 
-// Coerce any Supabase vector-ish shape -> number[]
 function isRecord(x: unknown): x is Record<string, unknown> {
   return typeof x === "object" && x !== null;
 }
@@ -69,38 +60,26 @@ function hasNumberLength(x: unknown): x is { length: number } {
 }
 
 function toNumberArraySafe(v: unknown): number[] | null {
-  // 1) Already a number[]
   if (Array.isArray(v) && typeof v[0] === "number") return v as number[];
-
-  // 2) Typed arrays (Float32Array, Float64Array, Int32Array, etc.)
-  // ArrayBufferView includes DataView (no length), so refine to array-like
   if (ArrayBuffer.isView(v) && hasNumberLength(v)) {
-    // At this point, v is something like a TypedArray with numeric indices
-    // Cast via unknown -> ArrayLike<number> to satisfy TS without widening to any
     return Array.from(v as unknown as ArrayLike<number>);
   }
-
-  // 3) JSON stringified vector
   if (typeof v === "string") {
     try {
       const parsed: unknown = JSON.parse(v);
       if (Array.isArray(parsed) && typeof parsed[0] === "number") return parsed as number[];
     } catch { /* ignore */ }
   }
-
-  // 4) Objects like { data: number[] }
   if (isRecord(v) && "data" in v) {
     const d = (v as { data?: unknown }).data;
     if (Array.isArray(d) && typeof d[0] === "number") return d as number[];
   }
-
   return null;
 }
 
 // ---------- Types ----------
 type IngestBody = {
   businessUnitId: string;
-  quarter: string; // e.g. 2025Q3
   limit?: number;
 };
 
@@ -116,11 +95,8 @@ type Review = {
 
 type RunIngestionOpts = { debug?: "emb" | "clu" | "ev" };
 
-// Supabase row helpers
 type ReviewTextEmbeddingRow = { body_sha: string; embedding: unknown };
 type ThemeRowShort = { id: string; cluster_id: string };
-
-// Draft type returned by buildThemeDraft
 type ThemeDraft = Awaited<ReturnType<typeof buildThemeDraft>>;
 
 // ---------- Validation ----------
@@ -133,42 +109,21 @@ function validate(body: unknown): asserts body is IngestBody {
   if (typeof b.businessUnitId !== "string" || b.businessUnitId.trim() === "") {
     throw new Error("`businessUnitId` is required (non-empty string)");
   }
-  if (typeof b.quarter !== "string" || !/^\d{4}Q[1-4]$/.test(b.quarter)) {
-    throw new Error("`quarter` must be like 2025Q3");
-  }
   if (b.limit !== undefined && (!Number.isInteger(b.limit) || (b.limit as number) <= 0)) {
     throw new Error("`limit` must be a positive integer");
   }
 }
 
-// ---------- Quarter helpers ----------
-async function resolveQuarterRange(quarter: string): Promise<{ start: Date; end: Date }> {
-  const year = Number(quarter.slice(0, 4));
-  const q = Number(quarter.slice(5));
-  const startMonths = { 1: 0, 2: 3, 3: 6, 4: 9 } as const;
-  const m = startMonths[q as 1 | 2 | 3 | 4];
-  const start = new Date(Date.UTC(year, m, 1));
-  const end = new Date(Date.UTC(year, m + 3, 0));
-  return { start, end };
-}
-
-async function fetchReviewsForQuarter(
+// ---------- Review Fetching ----------
+async function fetchRecentReviews(
   productIdOrDomain: string,
-  start: Date,
-  end: Date,
   limit: number,
 ): Promise<Review[]> {
-  // derive quarter string from the provided start date (your runner already has it)
-  const quarter = `${start.getUTCFullYear()}Q${Math.floor(start.getUTCMonth() / 3) + 1}`;
   const target = extractDomainFromTarget(productIdOrDomain);
 
-  const { items } = await fetchNormalizedTrustpilot(target, quarter, limit);
+  const { items } = await fetchNormalizedTrustpilot(target, limit);
 
   const mapped: Review[] = items
-    .filter((it) => {
-      const d = new Date(`${it.review_date}T00:00:00Z`);
-      return d >= start && d <= end;
-    })
     .map((it) => {
       const id = sha256Str(`${target}:${it.body_sha}:${it.review_date}`);
       return {
@@ -182,7 +137,6 @@ async function fetchReviewsForQuarter(
       } satisfies Review;
     });
 
-  // keep your canonical sort for determinism
   mapped.sort((a, b) => {
     if (a.product_id !== b.product_id) return a.product_id.localeCompare(b.product_id);
     if (a.review_date !== b.review_date) return a.review_date.localeCompare(b.review_date);
@@ -203,9 +157,7 @@ export async function getCachedEmbeddings(
     .select("body_sha, embedding")
     .eq("model", model)
     .in("body_sha", hashes);
-
   if (error) throw error;
-
   const rows = (data ?? []) as ReviewTextEmbeddingRow[];
   const result: Record<string, number[]> = {};
   for (const row of rows) {
@@ -227,17 +179,14 @@ async function putCachedEmbeddings(
   if (error) throw error;
 }
 
-// ---------- Embedding runner (deterministic) ----------
+// ---------- Embedding runner ----------
 async function embedDeterministic(texts: string[], hashes: string[]): Promise<number[][]> {
   if (texts.length !== hashes.length) {
     throw new Error(`texts.length (${texts.length}) !== hashes.length (${hashes.length})`);
   }
   if (texts.length === 0) return [];
 
-  console.log("emb:cache.request", { model: EMB_MODEL, count: hashes.length, first5: hashes.slice(0, 5) });
   const cached = await getCachedEmbeddings(hashes, EMB_MODEL);
-  console.log("emb:cache.resultFirst5", Object.keys(cached).slice(0, 5));
-
   const toEmbedIdx: number[] = [];
   const out: number[][] = new Array(texts.length);
   for (let i = 0; i < texts.length; i++) {
@@ -245,47 +194,30 @@ async function embedDeterministic(texts: string[], hashes: string[]): Promise<nu
     const v = cached[h];
     if (v && v.length > 0) {
       out[i] = roundVector(v, 6);
-      console.log("emb:source", { idx: i, body_sha: h, source: "cache", preview: out[i].slice(0, 8) });
     } else {
       toEmbedIdx.push(i);
     }
   }
-
   if (toEmbedIdx.length > 0) {
     const batchTexts = toEmbedIdx.map((i) => texts[i]);
     console.log("emb:api.request", { count: batchTexts.length });
-    const fresh = await embedTextBatch(batchTexts); // L2-normalized by lib
+    const fresh = await embedTextBatch(batchTexts);
     const freshRounded = fresh.map((v) => roundVector(v, 6));
-
     const rows = toEmbedIdx.map((i, k) => ({
       body_sha: hashes[i],
       embedding: freshRounded[k],
     }));
     await putCachedEmbeddings(rows, EMB_MODEL);
-
     toEmbedIdx.forEach((i, k) => {
       out[i] = freshRounded[k];
-      console.log("emb:source", { idx: i, body_sha: hashes[i], source: "api", preview: out[i].slice(0, 8) });
     });
-  }
-
-  for (let i = 0; i < Math.min(2, out.length); i++) {
-    console.log("emb:final.idxRow", { idx: i, body_sha: hashes[i], vecPreview: out[i]?.slice(0, 8) });
   }
   return out;
 }
 
-// ---------- Deterministic clustering (DBSCAN on rounded vectors) ----------
+// ---------- Deterministic clustering (HDBSCAN on rounded vectors) ----------
 type Item = { idx: number; id: string; body_sha: string; vec: number[] };
 
-function dot(a: number[], b: number[]): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
-function cosineDist(a: number[], b: number[]): number {
-  return 1 - dot(a, b);
-}
 function centroid(indices: number[], items: Item[]): number[] {
   const dim = items[0]?.vec.length ?? 0;
   const c = new Array(dim).fill(0) as number[];
@@ -302,60 +234,28 @@ function clusterIdFromCentroid6(c6: number[]): string {
   return `cl_${h.slice(0, 12)}`;
 }
 
-function dbscanDeterministic(items: Item[], eps: number, minPts: number): number[] {
-  const n = items.length;
-  const labels = new Array<number>(n).fill(-99); // -99 = unvisited, -1 = noise, >=0 = cluster
-  let cid = 0;
-
-  const neigh: number[][] = new Array(n);
-  for (let i = 0; i < n; i++) {
-    const nb: number[] = [];
-    for (let j = 0; j < n; j++) {
-      if (i === j) continue;
-      const d = cosineDist(items[i].vec, items[j].vec);
-      if (d <= eps) nb.push(j);
-    }
-    nb.sort((p, q) => {
-      const A = items[p], B = items[q];
-      if (A.body_sha !== B.body_sha) return A.body_sha < B.body_sha ? -1 : 1;
-      return A.id.localeCompare(B.id);
-    });
-    neigh[i] = nb;
-  }
-
-  for (let i = 0; i < n; i++) {
-    if (labels[i] !== -99) continue;
-    const N = neigh[i];
-    if (N.length + 1 < minPts) { labels[i] = -1; continue; }
-    const my = cid++;
-    labels[i] = my;
-    const queue: number[] = [i, ...N];
-    while (queue.length) {
-      const q = queue.shift() as number;
-      if (labels[q] === -1) labels[q] = my;
-      if (labels[q] !== -99) continue;
-      labels[q] = my;
-      const Nq = neigh[q];
-      if (Nq.length + 1 >= minPts) {
-        for (const j of Nq) if (labels[j] === -99 || labels[j] === -1) queue.push(j);
-      }
-    }
-  }
-  return labels;
-}
-
 async function clusterDeterministic(vectors: number[][], reviews: Review[]): Promise<{
   clusters: Array<{ id: string; size: number; centroid6: number[]; memberIdxs: number[] }>;
   items: Item[];
 }> {
+  if (vectors.length === 0) {
+    return { clusters: [], items: [] };
+  }
   if (vectors.length !== reviews.length) throw new Error("vectors/reviews length mismatch");
 
   const items: Item[] = reviews.map((r, i) => ({ idx: i, id: r.id, body_sha: r.body_sha!, vec: vectors[i] }));
-  const labels = dbscanDeterministic(items, CLU_EPS, CLU_MINPTS);
+  
+  console.log("Cluster minimum size: ", CLU_MIN_CLUSTER_SIZE)
+  const clusterer = new HDBSCAN({ minClusterSize: CLU_MIN_CLUSTER_SIZE, minSamples: CLU_MIN_SAMPLES });
+  const labels = clusterer.fit(vectors);
 
   const by: Map<number, number[]> = new Map();
-  labels.forEach((lab, i) => {
-    if (lab < 0) return; // skip noise for now
+  const noiseIndices: number[] = [];
+  labels.forEach((lab: number, i: number) => {
+    if (lab < 0) {
+        noiseIndices.push(i);
+        return;
+    }
     const arr = by.get(lab) ?? [];
     arr.push(i);
     by.set(lab, arr);
@@ -368,14 +268,11 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
     return { id, size: idxs.length, centroid6: c6, memberIdxs: idxs };
   });
 
-  // Convert noise to singleton clusters for debug determinism
   if (INCLUDE_NOISE_AS_SINGLETONS) {
-    for (let i = 0; i < labels.length; i++) {
-      if (labels[i] < 0) {
+    for (const i of noiseIndices) {
         const v6 = roundVector(items[i].vec, 6);
         const id = clusterIdFromCentroid6(v6);
         clusters.push({ id, size: 1, centroid6: v6, memberIdxs: [i] });
-      }
     }
   }
 
@@ -383,20 +280,11 @@ async function clusterDeterministic(vectors: number[][], reviews: Review[]): Pro
   return { clusters, items };
 }
 
-// ---------- Adapter: call labelClusterTheme using the picked evidence ----------
+
+// ---------- LLM Functions ----------
 type AspectName =
   | "pricing" | "onboarding" | "support" | "performance"
   | "integrations" | "reporting" | "usability" | "reliability" | "feature_gap";
-
-type Extracted = {
-  aspects: Array<{
-    aspect: AspectName;
-    sentiment: "positive" | "neutral" | "negative";
-    severity: "low" | "medium" | "high";
-    evidence: string;
-  }>;
-  persona?: { company_size?: "1-10" | "11-50" | "51-200" | "200+"; industry?: string };
-};
 
 async function llmNameAndSummarizeUsingThemes(
   _centroid6: readonly number[],
@@ -413,24 +301,19 @@ async function llmNameAndSummarizeUsingThemes(
   }
 
   const anthropic = new Anthropic({ apiKey: anthropicApiKey });
-
-  // Load canonical theme-labeling prompt when not provided
-  const effectivePrompt =
+  const basePrompt =
     promptTemplate ??
     (await fs.readFile(
       path.join(process.cwd(), "src", "prompts", "theme-labeling.md"),
       "utf8",
     ));
+  const effectivePrompt = `Do this for ${productId}.\n\n${basePrompt}`;
 
-  // Build the extractedByReviewId map using your real extractor
-  // Runs in parallel, then assembles the Map once all are done.
   const extractedPairs = await Promise.all(
     evidence.map(async (r) => {
       const body = String(r.body ?? "");
-      // Pass any meta you want; extractor supports it (optional)
-      const extracted: ExtractedFromLib = await extractFromReview({ body, meta: { review_id: r.id } });
-      // Trim evidence for prompt hygiene (labeler will cap again)
-      const trimmed: Extracted = {
+      const extracted: ExtractedFromLib = await extractFromReview({ body, meta: { review_id: r.id } }, { productId });
+      const trimmed: ExtractedFromLib = {
         aspects: extracted.aspects.map(a => ({
           aspect: a.aspect as AspectName,
           sentiment: a.sentiment,
@@ -443,7 +326,7 @@ async function llmNameAndSummarizeUsingThemes(
     })
   );
 
-  const extractedByReviewId = new Map<string, Extracted>(
+  const extractedByReviewId = new Map<string, ExtractedFromLib>(
     extractedPairs.filter(([, ex]) => ex.aspects.length > 0)
   );
 
@@ -462,92 +345,75 @@ async function llmNameAndSummarizeUsingThemes(
 
 // ---------- Pipeline ----------
 async function runIngestion(input: Required<IngestBody>, opts?: RunIngestionOpts) {
-  const { businessUnitId, quarter, limit } = input;
+  const { businessUnitId, limit } = input;
+  
+  // --- MODIFICATION START ---
+  // 1. Determine the current quarter (e.g., "2025Q4")
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const quarterNum = Math.floor(now.getUTCMonth() / 3) + 1;
+  const currentQuarter = `${year}Q${quarterNum}`;
 
-  const { start, end } = await resolveQuarterRange(quarter);
-  // Look up by natural key first
-const { data: existing, error: selErr } = await db
-  .from("manifests")
-  .select("id")
-  .eq("business_unit_id", businessUnitId)
-  .eq("quarter", quarter)
-  .eq("pipeline_version", PIPELINE_VERSION)
-  .maybeSingle();
-if (selErr) throw selErr;
-
-let manifestId: string;
-
-if (existing?.id) {
-  // Reuse the existing PK; update non-PK fields only
-  manifestId = existing.id;
-  const { error: updErr } = await db
+  // 2. Check if a manifest already exists for this quarter
+  const { data: existingManifest } = await db
     .from("manifests")
-    .update({
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
-      // any other mutable columns EXCEPT id
-    })
-    .eq("id", manifestId);
-  if (updErr) throw updErr;
-} else {
-  // Create a fresh row with a new id
-  manifestId = crypto.randomUUID();
+    .select("id")
+    .eq("business_unit_id", businessUnitId)
+    .eq("timestamp", currentQuarter) // Check against the 'timestamp' column
+    .maybeSingle();
+
+  // 3. If it exists, exit early to prevent re-fetching
+  if (existingManifest) {
+    console.log(`Manifest for ${businessUnitId} in ${currentQuarter} already exists. Skipping.`);
+    return {
+      ok: false as const,
+      message: `Ingestion for quarter ${currentQuarter} has already been processed.`,
+      processed: 0,
+      unit: businessUnitId,
+      quarter: currentQuarter,
+      manifestId: existingManifest.id,
+      themes: [],
+    };
+  }
+  // --- MODIFICATION END ---
+
+  // 4. If no manifest exists, proceed with a new run
+  const manifestId = crypto.randomUUID();
   const { error: insErr } = await db
     .from("manifests")
     .insert({
       id: manifestId,
       business_unit_id: businessUnitId,
-      quarter,
-      start_date: start.toISOString(),
-      end_date: end.toISOString(),
+      timestamp: currentQuarter, // Use the determined quarter name
       pipeline_version: PIPELINE_VERSION,
     });
   if (insErr) throw insErr;
-}
 
-  const reviews = await fetchReviewsForQuarter(businessUnitId, start, end, limit);
-  console.log("reviews fetched:", reviews.length, "range", start.toISOString(), end.toISOString(), "unit", businessUnitId);
-  console.log("emb:inputFirst5", reviews.slice(0, 5).map((r) => r.body_sha));
+  const reviews = await fetchRecentReviews(businessUnitId, limit);
+  console.log("reviews fetched:", reviews.length, "unit", businessUnitId);
 
   const texts = reviews.map((r) => (r.body ?? "").trim());
   const hashes = reviews.map((r) => r.body_sha ?? sha256Str(normalizeForSha(r.body)));
-
   const vectors = await embedDeterministic(texts, hashes);
 
   if (opts?.debug === "emb") {
-    const dim = vectors.length ? vectors[0].length : 0;
-    const sample = vectors[0];
-    console.log("emb:firstVecPreview", previewVec(sample, 8));
-    return {
-      step: "emb" as const,
-      usedModel: EMB_MODEL,
-      count: vectors.length,
-      dim,
-      samplePreview: previewVec(sample, 8),
-      sampleHash: vecHash6(sample),
-    };
+    return NextResponse.json(
+      vectors.map((v, i) => ({ id: reviews[i].id, vec: v.slice(0, 8) })),
+      { status: 200 },
+    );
   }
 
-  const { clusters, items } = await clusterDeterministic(vectors, reviews);
+  const { clusters } = await clusterDeterministic(vectors, reviews);
 
   if (opts?.debug === "clu") {
-    const out = clusters.map((c) => ({
-      id: c.id,
-      size: c.size,
-      centroidPreview: c.centroid6.slice(0, 8),
-      memberIds: c.memberIdxs.map((i) => items[i].body_sha).slice(0, 10),
-    }));
-    return { step: "clu" as const, clusters: out };
+    return NextResponse.json(clusters, { status: 200 });
   }
 
-  // Evidence selection + Theme draft wiring
   const reviewsForEvidence: EvidenceReview[] = reviews.map((r) => ({
     id: r.id,
     body: r.body ?? "",
     review_date: r.review_date,
   }));
-
-  // Build drafts per cluster deterministically
   const themes: Array<{ draft: ThemeDraft; uuid: string }> = [];
 
   for (const c of clusters) {
@@ -561,8 +427,6 @@ if (existing?.id) {
           clusterId: c.id,
         }),
     );
-
-    // Persist theme and obtain UUID
     const topic_key = c.id.replace(/^cl_/, "");
     const { data: themeRow, error: themeErr } = await db
     .from("themes")
@@ -576,31 +440,22 @@ if (existing?.id) {
       name: draft.name,
       summary: draft.summary,
       severity: draft.severity,
-    }, { onConflict: "manifest_id,cluster_id" })  // <- critical change
+    }, { onConflict: "manifest_id,cluster_id" })
     .select("id, cluster_id")
     .single();
     if (themeErr) throw themeErr;
-
     const typedThemeRow = themeRow as ThemeRowShort;
     themes.push({ draft, uuid: typedThemeRow.id });
   }
 
   if (opts?.debug === "ev") {
-    const debugClusters = clusters.map((c) => {
-      const members = c.memberIdxs.map((i) => reviewsForEvidence[i]);
-      return {
-        id: c.id,
-        size: c.size,
-        centroidPreview: c.centroid6.slice(0, 8),
-        evidence: explainEvidence(members, EVIDENCE_K_DEFAULT),
-      };
-    });
-    return { step: "ev" as const, clusters: debugClusters };
+    return NextResponse.json(
+      { themes: themes.map((t) => t.draft) },
+      { status: 200 },
+    );
   }
 
-  // Actions synthesis — build examples[] deterministically from evidence
   const byId = new Map(reviewsForEvidence.map(r => [r.id, r]));
-
   for (const { draft, uuid } of themes) {
     const examples = draft.evidence_ids
       .map(id => byId.get(id))
@@ -615,6 +470,7 @@ if (existing?.id) {
       theme: draft.name,
       summary: draft.summary,
       examples,
+      productId: businessUnitId,
     });
   }
 
@@ -622,7 +478,7 @@ if (existing?.id) {
     ok: true as const,
     processed: reviews.length,
     unit: businessUnitId,
-    quarter,
+    quarter: currentQuarter, // Return the quarter name
     manifestId,
     themes: themes.map(t => t.draft),
   };
@@ -654,8 +510,7 @@ export async function POST(req: Request) {
   const body = json as IngestBody;
   const resolved: Required<IngestBody> = {
     businessUnitId: body.businessUnitId.trim(),
-    quarter: body.quarter,
-    limit: body.limit ?? 50,
+    limit: body.limit ?? 100,
   };
 
   console.log("POST /api/ingest/run ->", { ...resolved, debug });

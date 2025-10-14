@@ -1,8 +1,8 @@
 // lib/cluster.ts
 import { createClient } from "@supabase/supabase-js";
 import type { PostgrestError } from "@supabase/supabase-js";
-// @ts-expect-error: density-clustering has no types
-import * as DC from "density-clustering";
+// NEW: Import the HDBSCAN library
+import { HDBSCAN } from 'hdbscan-ts';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -43,30 +43,38 @@ export async function fetchEmbeddingsByProduct(
 }
 
 /**
- * Run DBSCAN over L2-normalized embeddings using Euclidean distance.
+ * Run HDBSCAN over L2-normalized embeddings.
  * For normalized vectors, Euclidean distance is monotonic with cosine distance,
- * so this approximates cosine clustering without a custom metric.
+ * so this approximates cosine clustering.
  */
 export async function clusterReviewsByProduct(
   productId: string,
-  opts: { eps?: number; minPts?: number } = {}
+  opts: { minClusterSize?: number, minSamples?: number } = {}
 ): Promise<Record<number, string[]>> {
-  const eps = opts.eps ?? 0.18; // try 0.10–0.30
-  const minPts = opts.minPts ?? 6; // try 5–10
+  // UPDATED: Use minClusterSize, which is the primary parameter for HDBSCAN
+  const minClusterSize = opts.minClusterSize ?? 5; // Default to 5
+  const minSamples = opts.minSamples ?? 10; // Default to 10
 
   const rows = await fetchEmbeddingsByProduct(productId);
   if (rows.length === 0) return {};
 
   const vectors = rows.map((r) => r.embedding);
 
-  // density-clustering uses its own distance; omit to use Euclidean by default.
-  const dbscan = new DC.DBSCAN();
-  const clusters: number[][] = dbscan.run(vectors, eps, minPts);
+  // UPDATED: Call HDBSCAN instead of DBSCAN
+  // UPDATED: Instantiate the class and call the .run() method
+  const clusterer = new HDBSCAN({minClusterSize, minSamples})
+  const labels: number[] = clusterer.fit(vectors);
 
   // Map cluster index -> review_ids
   const result: Record<number, string[]> = {};
-  clusters.forEach((idxs, clusterId) => {
-    result[clusterId] = idxs.map((i) => rows[i].review_id);
+  labels.forEach((clusterId, index) => {
+    // Noise points are labeled -1, ignore them
+    if (clusterId === -1) return;
+
+    if (!result[clusterId]) {
+      result[clusterId] = [];
+    }
+    result[clusterId].push(rows[index].review_id);
   });
 
   return result;

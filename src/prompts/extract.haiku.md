@@ -9,7 +9,7 @@ Allowed aspects: pricing, onboarding, support, performance, integrations, report
 Infer persona only if explicitly stated (company size, industry).
 
 Schema (must match exactly):
-{"aspects":[{"aspect":"pricing|onboarding|support|performance|integrations|reporting|usability|reliability|feature_gap","sentiment":"positive|neutral|negative","severity":"low|medium|high","evidence":"<short quote>"}],"persona":{"company_size":"1-10|11-50|51-200|200+","industry":"<optional>"}}
+{"aspects":[{"aspect":"pricing|onboarding|support|performance|integrations|reporting|usability|reliability|feature_gap","sentiment":"positive|neutral|negative","severity":"low|medium|high","evidence":"<short quote>"}],"persona":{"company_size":"1-10|11-50|51-200|200+|null","industry":"<string|null>"}}
 
 Example (for pricing complaint):
 {{EXAMPLE_JSON}}

@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
     theme: theme.name,
     summary: theme.summary ?? "",
     examples: ex,
+    productId: theme.product_id,
   });
 
   return NextResponse.json({ ok: true, result }, { status: 200 });

@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation"
 
 function getQuarterString(d = new Date()) {
   const m = d.getUTCMonth() // 0-11
-  const q = Math.floor(m / 3)
+  const q = Math.floor(m / 3)+1
   const y = d.getUTCFullYear()
   return `${y}Q${q}`
 }

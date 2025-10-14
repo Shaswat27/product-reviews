@@ -26,7 +26,6 @@ function mustEnv(name: string) {
   return v;
 }
 
-// Read the Markdown prompt at runtime (server-only). This avoids Turbopack loaders.
 async function getSynthesizePrompt(): Promise<string> {
   const mdPath = path.join(process.cwd(), "src/prompts/synthesize.md");
   return fs.readFile(mdPath, "utf8");
@@ -51,7 +50,7 @@ export async function getActionsCacheFromActions(themeId: string) {
     .eq("prompt_version", PROMPT_VERSION)
     .maybeSingle();
   if (error) throw error;
-  return data?.drafts ?? null; // null = miss
+  return data?.drafts ?? null;
 }
 
 async function upsertRealActions(
@@ -60,7 +59,6 @@ async function upsertRealActions(
 ) {
   if (!actions?.length) return;
 
-  // fetch existing descriptions once (case-insensitive dedupe)
   const { data: existing } = await supabase
     .from("actions")
     .select("description")
@@ -73,42 +71,40 @@ async function upsertRealActions(
     const key = a.description.trim().toLowerCase();
     if (seen.has(key)) continue;
 
-    // IMPORTANT: carry prompt_version on real rows too
     await supabase.from("actions").insert({
       theme_id: themeUuid,
       kind: a.kind,
       description: a.description,
       impact: a.impact,
       effort: a.effort,
-      evidence: a.evidence,         // JSONB array in your schema
+      evidence: a.evidence,
       prompt_version: PROMPT_VERSION,
     });
     seen.add(key);
   }
 }
 
-// Synthesizes root causes + actions for a theme
+// CHANGED: Added productId to the function signature.
 export async function synthesizeTheme(theme: {
-  theme_id: string; // <-- MUST be the themes.id UUID
+  theme_id: string;
   theme: string;
   summary: string;
   examples: Array<{ snippet: string; evidence: { type: string; id: string } }>;
+  productId: string;
 }) {
-  // 1) CACHE READ (Option B: actions.drafts sentinel row)
   const cached = await getActionsCacheFromActions(theme.theme_id);
   if (cached) {
     const parsed = ActionsSchema.parse(cached);
-    // Ensure real actions exist (idempotent upsert)
     await upsertRealActions(theme.theme_id, parsed.actions);
     return parsed;
   }
 
-  // 2) Deterministic LLM call (temp=0, top_p=1, strict JSON schema)
-  const systemPrompt = await getSynthesizePrompt();
+  // CHANGED: Prepend product name to the prompt.
+  const baseSystemPrompt = await getSynthesizePrompt();
+  const systemPrompt = `Do this for ${theme.productId}.\n\n${baseSystemPrompt}`;
 
   const response = await withTransportRetry(() => client.responses.create({
     model: "gpt-5-mini",
-    // DETERMINISTIC:
     input: [
       { role: "developer", content: [{ type: "input_text", text: systemPrompt }] },
       { role: "user",      content: [{ type: "input_text", text: `THEME INPUT:\n${JSON.stringify(theme, null, 2)}` }] },
@@ -117,7 +113,7 @@ export async function synthesizeTheme(theme: {
       format: {
         type: "json_schema",
         name: "synthesis",
-        strict: true, // 🔒 strict JSON enforcement for determinism
+        strict: true,
         schema: {
           type: "object",
           additionalProperties: false,
@@ -155,10 +151,8 @@ export async function synthesizeTheme(theme: {
 
   const parsed = ActionsSchema.parse(JSON.parse(response.output_text));
 
-  // 3) WRITE CACHE (sentinel row: description='__cache__', drafts JSONB)
   await setActionsCacheInActions(theme.theme_id, parsed);
 
-  // 4) UPSERT REAL ACTIONS (idempotent)
   await upsertRealActions(theme.theme_id, parsed.actions);
 
   return parsed;
@@ -169,13 +163,13 @@ export async function setActionsCacheInActions(themeId: string, blob: unknown) {
   const { error } = await supabase.from("actions").upsert(
     {
       theme_id: themeId,
-      kind: "product",                  // satisfies constraints
-      description: "__cache__",         // sentinel cache row
+      kind: "product",
+      description: "__cache__",
       impact: 1,
       effort: 1,
       evidence: [],
       prompt_version: PROMPT_VERSION,
-      drafts: blob,                     // JSONB cache blob
+      drafts: blob,
     },
     { onConflict: "theme_id,description" }
   );
