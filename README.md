@@ -4,7 +4,7 @@
 
 This project is an AI-powered tool that turns unstructured **customer reviews** into **actionable product & go-to-market (GTM) insights**. It's built as a demonstration of how founders and product managers can use AI to distill noisy user feedback into clear priorities for their roadmap, pricing strategy, and market positioning.
 
-👉 **Live demo:** [_https://signallens.vercel.app/](https://signallens.vercel.app/)
+👉 **Live demo:** [https://signallens.vercel.app/](https://signallens.vercel.app/)
 
 ---
 
@@ -13,10 +13,10 @@ This project is an AI-powered tool that turns unstructured **customer reviews** 
 The application fetches, processes, and synthesizes reviews in a multi-stage AI pipeline to generate insights. To improve performance and reduce costs, results from the pipeline are cached in a database.
 
 1.  **Ingestion**: Fetches the latest product reviews from Trustpilot using the **Outscraper API**.
-2.  **Extraction**: An AI model (**Anthropic's Claude 3.5 Haiku**) reads each review and extracts key **aspect-opinion pairs** (e.g., "UI" -> "confusing", "customer support" -> "very responsive").
+2.  **Extraction**: An AI model (**Anthropic's `Claude 3.5 Haiku`**) reads each review and extracts key **aspect-opinion pairs** (e.g., "UI" -> "confusing", "customer support" -> "very responsive").
 3.  **Clustering**: The extracted aspect-opinion pairs are converted into numerical representations (embeddings) using **OpenAI's `text-embedding-3-small`** model and then grouped into clusters using the **HDBSCAN** algorithm. This groups semantically similar pieces of feedback together.
-4.  **Theme Labeling**: (**Anthropic's Claude 3.5 Haiku**) analyzes each cluster to generate a concise **theme name**, a summary of the underlying issue or compliment, and a **severity score**.
-5.  **Synthesis**: Finally, **OpenAI's GPT-5 mini** model generates concrete, actionable **product and GTM recommendations** for each identified theme, complete with estimated impact and effort scores.
+4.  **Theme Labeling**: (**Anthropic's `Claude 3.5 Haiku`**) analyzes each cluster to generate a concise **theme name**, a summary of the underlying issue or compliment, and a **severity score**.
+5.  **Synthesis**: Finally, **OpenAI's `GPT-5 mini`** model generates concrete, actionable **product and GTM recommendations** for each identified theme, complete with estimated impact and effort scores.
 
 ---
 
@@ -78,6 +78,7 @@ SignalLens addresses this by automating the entire workflow. It provides a direc
 
 ### **📂 Repo Structure**
 
+```
 /src
 ├── /app
 │   ├── /api          → API routes for the AI pipeline stages
@@ -87,7 +88,7 @@ SignalLens addresses this by automating the entire workflow. It provides a direc
 ├── /lib              → Core application logic, AI functions, caching
 └── /prompts          → The prompts used for the AI models
 /README.md
-
+```
 
 ---
 
