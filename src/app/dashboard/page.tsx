@@ -133,14 +133,16 @@ export default async function Dashboard({
     Array.isArray(figmaTopActions) && figmaTopActions.length > 0;
 
   return (
-    <div className="space-y-6 min-w-0 w-full">
-      {/* Use the new DashboardHeader component and pass the selected product name */}
+  // Add the container with padding here to wrap the entire page
+  <div className="px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+    <div className="space-y-6">
+      {/* Use the new DashboardHeader component */}
       <DashboardHeader
         productList={productList}
         selectedProductName={selectedProduct?.name}
       />
 
-      {/* Metrics Grid */}
+      {/* Metrics Grid (no changes needed here) */}
       <div className="lg:hidden">
         <div className="grid grid-cols-2 gap-2">
           <CompactMetricCard
@@ -181,11 +183,11 @@ export default async function Dashboard({
         />
       </div>
 
-      {/* Content */}
-      <div className="grid gap-8 xl:grid-cols-3 w-full min-w-0">
+      {/* Content (no changes needed here) */}
+      <div className="grid gap-8 xl:grid-cols-3 w-full">
         <div
           className={cn(
-            "space-y-4 lg:space-y-6 w-full min-w-0",
+            "space-y-4 lg:space-y-6 w-full",
             hasActions ? "xl:col-span-2" : "xl:col-span-3"
           )}
         >
@@ -219,7 +221,7 @@ export default async function Dashboard({
         </div>
 
         {hasActions && (
-          <div className="xl:col-span-1 space-y-4 lg:space-y-6 w-full min-w-0">
+          <div className="xl:col-span-1 space-y-4 lg:space-y-6 w-full">
             <TopActionsCard
               title="Top 3 Product & GTM Actions"
               actions={figmaTopActions}
@@ -228,5 +230,6 @@ export default async function Dashboard({
         )}
       </div>
     </div>
+  </div>
   );
 }

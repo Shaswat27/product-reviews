@@ -27,24 +27,20 @@ export default function RootLayout({
           fallback={<div className="p-4 text-sm opacity-60">Loading…</div>}
         >
           <SelectedProductProvider>
-            {/* The <header> is removed from the layout. The page will now control its own header. */}
+            {/* The main tag no longer enforces padding */}
             <main className="flex-1">
-              <div className="w-full px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
-                <Suspense
-                  fallback={
-                    <div className="text-sm opacity-60">Loading…</div>
-                  }
-                >
-                  {children}
-                </Suspense>
-              </div>
+              <Suspense
+                fallback={
+                  <div className="text-sm opacity-60">Loading…</div>
+                }
+              >
+                {children}
+              </Suspense>
             </main>
-
-            {/* Global toast portal */}
             <ClientToaster />
           </SelectedProductProvider>
         </Suspense>
-        <Analytics /> {/* <-- Component added here */}
+        <Analytics />
       </body>
     </html>
   );

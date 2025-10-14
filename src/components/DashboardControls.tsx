@@ -87,8 +87,10 @@ export default function DashboardControls({
 
   return (
     // The h1 title is removed from here. This component is now just for controls.
-    <div className="flex items-center gap-2">
-      <ProductSearch fallbackOptions={productList} />
+    <div className="flex w-full items-center gap-2 md:w-auto">
+      <div className="flex-1 min-w-0">
+        <ProductSearch fallbackOptions={productList} />
+      </div>
 
       <Button onClick={handleGenerateClick} disabled={isGenerating}>
         {isGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

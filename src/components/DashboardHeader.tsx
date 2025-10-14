@@ -42,7 +42,7 @@ export default function DashboardHeader({
           </div>
 
           <p className="text-sm text-muted-foreground">
-            Product Insights from Top Trustpilot Review Pages
+            Insights from Top Trustpilot Reviews 
           </p>
         </div>
       </div>
