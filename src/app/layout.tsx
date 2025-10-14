@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { SelectedProductProvider } from "./providers/SelectedProductProvider";
 import ClientToaster from "@/components/ClientToaster";
+import { Analytics } from "@vercel/analytics/react"; // <-- Import added here
 
 export const metadata = {
   title: "SignalLens",
@@ -43,6 +44,7 @@ export default function RootLayout({
             <ClientToaster />
           </SelectedProductProvider>
         </Suspense>
+        <Analytics /> {/* <-- Component added here */}
       </body>
     </html>
   );
