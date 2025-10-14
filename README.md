@@ -2,95 +2,94 @@
 
 ### **Overview**
 
-This project is an AI-powered SaaS-style tool that turns **customer reviews** into **actionable product & GTM insights**.\
-&#x20;Built as a demo for how founders/PMs can use AI to distill noisy user feedback into **roadmap priorities, pricing tweaks, and positioning ideas**.
+This project is an AI-powered tool that turns unstructured **customer reviews** into **actionable product & go-to-market (GTM) insights**. It's built as a demonstration of how founders and product managers can use AI to distill noisy user feedback into clear priorities for their roadmap, pricing strategy, and market positioning.
 
-👉 Live demo: _https://signallens.vercel.app/_
+👉 **Live demo:** [_https://signallens.vercel.app/](https://signallens.vercel.app/)
+
+---
+
+### **AI Pipeline & How It Works**
+
+The application fetches, processes, and synthesizes reviews in a multi-stage AI pipeline to generate insights. To improve performance and reduce costs, results from the pipeline are cached in a database.
+
+1.  **Ingestion**: Fetches the latest product reviews from Trustpilot using the **Outscraper API**.
+2.  **Extraction**: An AI model (**Anthropic's Claude 3.5 Haiku**) reads each review and extracts key **aspect-opinion pairs** (e.g., "UI" -> "confusing", "customer support" -> "very responsive").
+3.  **Clustering**: The extracted aspect-opinion pairs are converted into numerical representations (embeddings) using **OpenAI's `text-embedding-3-small`** model and then grouped into clusters using the **HDBSCAN** algorithm. This groups semantically similar pieces of feedback together.
+4.  **Theme Labeling**: (**Anthropic's Claude 3.5 Haiku**) analyzes each cluster to generate a concise **theme name**, a summary of the underlying issue or compliment, and a **severity score**.
+5.  **Synthesis**: Finally, **OpenAI's GPT-5 mini** model generates concrete, actionable **product and GTM recommendations** for each identified theme, complete with estimated impact and effort scores.
+
+---
 
 ### **Features**
 
-- **Auth & Accounts** – email login (Supabase)
+-   **Public Access**: The application is publicly accessible, with no authentication required.
+-   **Dashboard**: A clean dashboard that displays the top customer themes, severity scores, and the number of reviews that support each theme.
+-   **Actionable Insights**: Each theme includes recommended **product & GTM actions** with scores for impact and effort, helping teams prioritize.
+-   **Trustpilot Integration**: Search for any company on Trustpilot to analyze their reviews in real-time.
 
-- **Dashboard** – Top 3–5 customer themes, with severity + trend indicators (week-over-week)
-
-- **Theme Cards** – each includes recommended **product & GTM actions**, with evidence counts
-
-- **Insights Archive** – historical “Founder 1-pagers” (saved weekly reports)
-
-- **Settings Page** – manage account + placeholder for data source connections
-
-- **UI Polish** – modern SaaS look using Next.js, Tailwind, shadcn/ui, and Recharts
-
+---
 
 ### **Tech Stack**
 
-- **Frontend:** Next.js, Tailwind, shadcn/ui
+-   **Frontend:** Next.js, Tailwind CSS, shadcn/ui
+-   **Backend/DB:** Supabase (Postgres + pgvector for embeddings)
+-   **Deployment:** Vercel Hobby (free tier)
+-   **AI Models:** Anthropic Claude 3.5 Haiku, OpenAI GPT-5 mini, OpenAI text-embedding-3-small
+-   **Data Scraping:** Outscraper API for Trustpilot reviews
+-   **Caching:** Pipeline results are cached in the Supabase database.
 
-- **Backend/Auth/DB:** Supabase (Postgres + pgvector)
-
-- **Charts:** Recharts
-
-- **Deployment:** Vercel Hobby (free tier)
-
-- **AI Pipeline (future):**
-
-  - **Stage-1 (extraction):** Claude 3.5 Haiku / GPT-4o-mini → aspect/opinion pairs
-
-  - **Stage-2 (synthesis):** GPT-4o / Claude Sonnet → product & GTM insights
-
+---
 
 ### **📊 Data Model (simplified)**
 
-    User(id, email, password_hash)  
-    Review(id, source, text, rating, date)  
-    Theme(id, name, severity, trend, evidence_count)  
-    Action(id, description, type, impact_score, effort_score, theme_id)  
-    InsightReport(id, date, summary, linked_themes)
+The AI pipeline populates and accesses a data model stored in Supabase Postgres.
 
+-   **Review Embeddings**: Stores the raw vector, product name, and date of each customer review.
+-   **Theme**: Represents a cluster of feedback, containing a generated name, summary, severity, and evidence count. This table is also used for caching theme-related results from the AI pipeline.
+-   **Action**: Stores the generated recommendations, including a description, type (product or GTM), impact/effort scores, and a link to its parent theme. It also serves as a cache for synthesized actions.
+-   **Manifests**: Stores a log when reviews where fetched for the particular product to limit repeat fetches within a quarter.
+
+---
 
 ### **🔮 Roadmap**
 
 **MVP (this repo):**
 
-- Mock review ingestion (JSON file in `/data`)
-
-- Dashboard + Insights pages (with dummy trends & actions)
-
-- Ready for deployment on Vercel
+-   Live review ingestion from Trustpilot via Outscraper.
+-   Dashboard with AI-generated themes and actions.
+-   Deployed on Vercel.
 
 **Next Iterations:**
 
-- Connect to **Trustpilot free API** for live review ingestion
+-   Integrate additional review sources like G2 or App/Play Store.
+-   Implement user accounts to save and track analyses over time.
+-   Add trend analysis to see how themes evolve quarter-over-quarter.
+-   Slack/Notion integration for automatically publishing insights to internal team channels.
 
-- Add small **sample of G2 reviews via Apify/Outscraper** for depth
-
-- Implement **bi-weekly email briefing** (send summary to founders/execs)
-
-- Multi-language review support
-
-- Slack/Notion integration for auto-publishing insights
-
+---
 
 ### **🎯 Why This Project Matters**
 
-- **Recruiter Signal:** Demonstrates end-to-end product thinking (framing → scoping → shipping).
+In a competitive market, understanding the customer's voice is critical, but the process is often manual, time-consuming, and expensive. Product and marketing teams spend hours sifting through reviews, support tickets, and survey responses to identify patterns.
 
-- **Technical Proof:** Shows ability to vibe-code a SaaS product with auth, dashboard, and AI integration.
+SignalLens addresses this by automating the entire workflow. It provides a direct line from raw, unstructured customer feedback to strategic, prioritized actions. While many tools can aggregate feedback, this project focuses on the last mile: generating opinionated product and GTM recommendations that a startup or product team can debate and act on immediately. It aims to democratize access to the kind of deep, actionable insights that are often locked behind enterprise-grade SaaS platforms, making it easier for any team to build a truly customer-centric roadmap.
 
-- **Business Acumen:** Focuses on **product & GTM strategy**, not just raw NLP.
+---
+
+### **📂 Repo Structure**
+
+/src
+├── /app
+│   ├── /api          → API routes for the AI pipeline stages
+│   └── /dashboard    → The main application dashboard
+├── /components       → Reusable UI components
+├── /data             → Mock data files for development
+├── /lib              → Core application logic, AI functions, caching
+└── /prompts          → The prompts used for the AI models
+/README.md
 
 
-### **📂 Repo Structure (expected)**
-
-    /app/(protected)  
-      /dashboard    → main insights dashboard  
-      /insights     → historical reports  
-      /settings     → account + data connections  
-      /api          → placeholder API routes  
-    /data  
-      mock_reviews.json  
-      mock_themes.json  
-    /README.md  
+---
 
 ### **📧 Contact**
 
