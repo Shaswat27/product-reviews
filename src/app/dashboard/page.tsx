@@ -70,6 +70,9 @@ export default async function Dashboard({
   }));
   const selectedId = q ?? productIds[0];
 
+  // 4. Find the selected product to pass its name to the header
+  const selectedProduct = productList.find((p) => p.id === selectedId);
+
   const { data: themes, error: themesErr } = await supabase
     .from("themes")
     .select("id, product_id, name, severity, trend, evidence_count, summary")
@@ -131,8 +134,11 @@ export default async function Dashboard({
 
   return (
     <div className="space-y-6 min-w-0 w-full">
-      {/* Use the new DashboardHeader component */}
-      <DashboardHeader productList={productList} />
+      {/* Use the new DashboardHeader component and pass the selected product name */}
+      <DashboardHeader
+        productList={productList}
+        selectedProductName={selectedProduct?.name}
+      />
 
       {/* Metrics Grid */}
       <div className="lg:hidden">
@@ -183,7 +189,6 @@ export default async function Dashboard({
             hasActions ? "xl:col-span-2" : "xl:col-span-3"
           )}
         >
-          {/* Add the "Top Customer Themes" title here */}
           <h2 className="text-xl lg:text-2xl font-semibold bg-gradient-to-r from-primary to-primary/80 bg-clip-text text-transparent">
             Top Customer Themes
           </h2>
